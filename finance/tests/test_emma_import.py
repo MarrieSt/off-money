@@ -11,6 +11,8 @@ from django.core.management.base import CommandError
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
+from django.utils import timezone
+
 from finance.models import EmmaRawTransaction, FinancialAccount, ImportRun, Transaction
 from money.services.emma_import import (
     ImportConfigurationError,
@@ -31,7 +33,7 @@ class EmmaRowNormalizationTests(SimpleTestCase):
     def test_normalize_trims_whitespace_and_normalizes_nulls_dates_and_amounts(self):
         normalized = normalize_row(
             {
-                "Date": " 03/01/2026 ",
+                "Date": " 3/1/2026 ",
                 "Amount": " £1,000.00 ",
                 "Notes": "  lunch  ",
                 "Tags": "   ",
@@ -39,20 +41,25 @@ class EmmaRowNormalizationTests(SimpleTestCase):
         )
         self.assertEqual(
             normalized,
-            {"Date": "2026-01-03", "Amount": "1000", "Notes": "lunch", "Tags": None},
+            {"Date": "2026-03-01", "Amount": "1000", "Notes": "lunch", "Tags": None},
         )
 
     def test_hash_is_stable_for_equivalent_row_values_and_key_order(self):
-        first = {"ID": " emma-1 ", "Date": "03/01/2026", "Amount": "£1,000.00"}
+        first = {"ID": " emma-1 ", "Date": "1/3/2026", "Amount": "£1,000.00"}
         second = {"Amount": "1000", "Date": "2026-01-03", "ID": "emma-1"}
         self.assertEqual(hash_row(first), hash_row(second))
 
     def test_amount_parser_uses_decimal_and_accepts_grouping(self):
         self.assertEqual(parse_amount("-£1,234.50"), Decimal("-1234.50"))
 
-    def test_date_parser_accepts_iso_and_uk_dates(self):
+    def test_date_parser_uses_source_specific_american_format_for_emma(self):
         self.assertEqual(parse_transaction_date("2026-01-03"), date(2026, 1, 3))
-        self.assertEqual(parse_transaction_date("03/01/2026"), date(2026, 1, 3))
+        self.assertEqual(parse_transaction_date("8/31/2022"), date(2022, 8, 31))
+        self.assertEqual(parse_transaction_date("9/1/2022"), date(2022, 9, 1))
+        with self.assertRaises(ValueError):
+            parse_transaction_date("31/08/2022")
+        with self.assertRaises(ValueError):
+            parse_transaction_date("9/1/2022", source_system="other-source")
 
 
 @override_settings(
@@ -114,7 +121,7 @@ class EmmaImportServiceTests(TestCase):
     def source_row(self, **overrides):
         raw_data = {
             "ID": "emma-transaction-1",
-            "Date": "03/01/2026",
+            "Date": "1/3/2026",
             "Amount": "-12.34",
             "Account": "Current account",
             "Bank": "Example Bank",
@@ -187,6 +194,38 @@ class EmmaImportServiceTests(TestCase):
         self.assertEqual(transaction_record.amount, Decimal("-18.50"))
         self.assertEqual(transaction_record.merchant_name, "Cafe Example Ltd")
         self.assertEqual(EmmaRawTransaction.objects.get().raw_data["Amount"], "-18.50")
+
+    @patch("money.services.emma_import.fetch_worksheet_rows")
+    def test_rerun_corrects_previously_misparsed_transaction_by_emma_id(self, fetch_rows):
+        row = self.source_row(**{"Date": "9/1/2022"})
+        old_run = ImportRun.objects.create(user=self.user, started_at=timezone.now())
+        EmmaRawTransaction.objects.create(
+            user=self.user,
+            import_run=old_run,
+            source_transaction_id="emma-transaction-1",
+            source_row_number=2,
+            source_hash="old-uk-date-hash",
+            raw_data=row["raw_data"],
+            first_seen_at=timezone.now(),
+            last_seen_at=timezone.now(),
+        )
+        existing = Transaction.objects.create(
+            user=self.user,
+            account=self.account,
+            source_transaction_id="emma-transaction-1",
+            transaction_date=date(2022, 1, 9),
+            amount=Decimal("-12.34"),
+            source_content_hash="old-uk-date-hash",
+        )
+        fetch_rows.return_value = [row]
+
+        run = run_emma_import()
+
+        existing.refresh_from_db()
+        self.assertEqual(run.rows_updated, 1)
+        self.assertEqual(Transaction.objects.count(), 1)
+        self.assertEqual(existing.pk, Transaction.objects.get().pk)
+        self.assertEqual(existing.transaction_date, date(2022, 9, 1))
 
     @patch("money.services.emma_import.fetch_worksheet_rows")
     def test_import_discovers_accounts_and_bad_rows_do_not_stop_the_run(self, fetch_rows):

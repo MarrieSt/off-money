@@ -24,6 +24,11 @@ class ImportRowError(ValueError):
     pass
 
 
+SOURCE_DATE_FORMATS = {
+    Transaction.SOURCE_EMMA: ("%m/%d/%Y", "%m/%d/%y", "%m-%d-%Y", "%m-%d-%y"),
+}
+
+
 def _field_map(row):
     return {str(key).strip().casefold(): value for key, value in row.items()}
 
@@ -38,7 +43,7 @@ def _value(fields, name):
     return value
 
 
-def parse_transaction_date(value):
+def parse_transaction_date(value, source_system=Transaction.SOURCE_EMMA):
     if isinstance(value, datetime):
         return value.date()
     if isinstance(value, date):
@@ -57,7 +62,7 @@ def parse_transaction_date(value):
     except ValueError:
         pass
 
-    for date_format in ("%d/%m/%Y", "%d-%m-%Y", "%d/%m/%y"):
+    for date_format in SOURCE_DATE_FORMATS.get(source_system, ()):
         try:
             return datetime.strptime(text, date_format).date()
         except ValueError:
@@ -83,7 +88,7 @@ def parse_amount(value):
     return amount
 
 
-def normalize_row(raw_data):
+def normalize_row(raw_data, source_system=Transaction.SOURCE_EMMA):
     normalized = {}
     for key, original_value in raw_data.items():
         header = str(key).strip()
@@ -94,7 +99,7 @@ def normalize_row(raw_data):
         normalized_header = header.casefold()
         if normalized_header == "date" and value is not None:
             try:
-                value = parse_transaction_date(value).isoformat()
+                value = parse_transaction_date(value, source_system=source_system).isoformat()
             except ImportRowError:
                 pass
         elif normalized_header == "amount" and value is not None:
@@ -110,9 +115,9 @@ def normalize_row(raw_data):
     return normalized
 
 
-def hash_row(raw_data):
+def hash_row(raw_data, source_system=Transaction.SOURCE_EMMA):
     stable_json = json.dumps(
-        normalize_row(raw_data),
+        normalize_row(raw_data, source_system=source_system),
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,
@@ -155,7 +160,9 @@ def _account_for_row(user, fields):
 
 
 def _transaction_defaults(user, account, fields, raw_data, source_hash, now, existing):
-    transaction_date = parse_transaction_date(_value(fields, "Date"))
+    transaction_date = parse_transaction_date(
+        _value(fields, "Date"), source_system=Transaction.SOURCE_EMMA
+    )
     amount = parse_amount(_value(fields, "Amount"))
     merchant = _as_source_text(_value(fields, "Merchant"))
     counterparty = _as_source_text(_value(fields, "Counterparty"))
@@ -199,7 +206,7 @@ def _process_row(run, user, row):
         raise ImportRowError("Emma transaction ID is missing.")
 
     now = timezone.now()
-    source_hash = hash_row(raw_data)
+    source_hash = hash_row(raw_data, source_system=Transaction.SOURCE_EMMA)
     raw_record, created = EmmaRawTransaction.objects.get_or_create(
         user=user,
         source_system=Transaction.SOURCE_EMMA,
