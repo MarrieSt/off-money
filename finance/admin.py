@@ -1,13 +1,25 @@
-from django.contrib import admin
+from django.contrib import admin, messages
+from django.core.exceptions import PermissionDenied
+from django.http import HttpResponseNotAllowed
+from django.shortcuts import redirect
+from django.urls import path, reverse
 
 from .models import (
     DailyStatus,
+    EmmaRawTransaction,
     EarnedReward,
     FinancialAccount,
+    ImportRun,
     RewardDefinition,
     SpendRule,
     Transaction,
 )
+from money.services.emma_import import run_emma_import
+
+
+admin.site.site_header = "Money administration"
+admin.site.site_title = "Money Admin"
+admin.site.index_title = "Data and configuration"
 
 
 @admin.register(FinancialAccount)
@@ -124,3 +136,110 @@ class EarnedRewardAdmin(admin.ModelAdmin):
     list_filter = ("earned_on", "user", "reward")
     date_hierarchy = "earned_on"
     ordering = ("-earned_on", "-created_at")
+
+
+@admin.register(ImportRun)
+class ImportRunAdmin(admin.ModelAdmin):
+    change_list_template = "admin/finance/importrun/change_list.html"
+    list_display = (
+        "started_at",
+        "source",
+        "user",
+        "status",
+        "rows_read",
+        "rows_created",
+        "rows_updated",
+        "rows_skipped",
+        "rows_failed",
+        "finished_at",
+    )
+    list_filter = ("source", "status", "user")
+    search_fields = ("error_message", "user__username")
+    readonly_fields = (
+        "source",
+        "user",
+        "status",
+        "started_at",
+        "finished_at",
+        "rows_read",
+        "rows_created",
+        "rows_updated",
+        "rows_skipped",
+        "rows_failed",
+        "error_message",
+    )
+    ordering = ("-started_at",)
+
+    def has_add_permission(self, request):
+        return False
+
+    def get_urls(self):
+        custom_urls = [
+            path(
+                "run-emma-import/",
+                self.admin_site.admin_view(self.run_import_view),
+                name="finance_importrun_run",
+            )
+        ]
+        return custom_urls + super().get_urls()
+
+    def run_import_view(self, request):
+        if request.method != "POST":
+            return HttpResponseNotAllowed(["POST"])
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        try:
+            run = run_emma_import()
+        except Exception:
+            self.message_user(
+                request,
+                "Emma import failed. Check the configured credentials and application logs.",
+                level=messages.ERROR,
+            )
+        else:
+            self.message_user(
+                request,
+                (
+                    f"Emma import {run.status}: {run.rows_created} created, "
+                    f"{run.rows_updated} updated, {run.rows_skipped} skipped, "
+                    f"{run.rows_failed} failed."
+                ),
+                level=messages.WARNING if run.rows_failed else messages.SUCCESS,
+            )
+        return redirect(reverse("admin:finance_importrun_changelist"))
+
+
+@admin.register(EmmaRawTransaction)
+class EmmaRawTransactionAdmin(admin.ModelAdmin):
+    list_display = (
+        "source_transaction_id",
+        "source_system",
+        "user",
+        "source_row_number",
+        "source_hash",
+        "first_seen_at",
+        "last_seen_at",
+        "import_run",
+    )
+    list_filter = ("source_system", "user", "import_run")
+    search_fields = ("source_transaction_id", "source_hash", "user__username")
+    readonly_fields = (
+        "user",
+        "import_run",
+        "source_system",
+        "source_transaction_id",
+        "source_row_number",
+        "source_hash",
+        "raw_data",
+        "first_seen_at",
+        "last_seen_at",
+        "created_at",
+        "updated_at",
+    )
+    ordering = ("-last_seen_at",)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False

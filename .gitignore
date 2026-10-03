@@ -7,3 +7,6 @@ venv/
 staticfiles/
 .DS_Store
 .pytest_cache/
+credentials/
+service-account*.json
+google-credentials*.json

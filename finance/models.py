@@ -54,7 +54,11 @@ class Transaction(TimeStampedModel):
     )
     source_system = models.CharField(max_length=50, default=SOURCE_EMMA)
     source_transaction_id = models.CharField(max_length=255, null=True, blank=True)
+    source_content_hash = models.CharField(max_length=64, blank=True)
     transaction_date = models.DateField()
+    posted_date = models.DateField(null=True, blank=True)
+    description = models.TextField(blank=True)
+    merchant_name = models.CharField(max_length=255, blank=True)
     amount = models.DecimalField(max_digits=14, decimal_places=2)
     currency = models.CharField(max_length=3, default="GBP")
 
@@ -96,8 +100,77 @@ class Transaction(TimeStampedModel):
             raise ValidationError({"account": "The account must belong to the transaction user."})
 
     def __str__(self):
-        description = self.source_merchant or self.source_counterparty or self.account
-        return f"{self.transaction_date}: {description} ({self.amount} {self.currency})"
+        label = self.description or self.source_merchant or self.source_counterparty or self.account
+        return f"{self.transaction_date}: {label} ({self.amount} {self.currency})"
+
+
+class ImportRun(models.Model):
+    class Status(models.TextChoices):
+        RUNNING = "running", "Running"
+        SUCCESS = "success", "Success"
+        PARTIAL = "partial", "Partial"
+        FAILED = "failed", "Failed"
+
+    source = models.CharField(max_length=50, default=Transaction.SOURCE_EMMA)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="import_runs",
+        null=True,
+        blank=True,
+    )
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.RUNNING)
+    started_at = models.DateTimeField()
+    finished_at = models.DateTimeField(null=True, blank=True)
+    rows_read = models.PositiveIntegerField(default=0)
+    rows_created = models.PositiveIntegerField(default=0)
+    rows_updated = models.PositiveIntegerField(default=0)
+    rows_skipped = models.PositiveIntegerField(default=0)
+    rows_failed = models.PositiveIntegerField(default=0)
+    error_message = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-started_at"]
+        verbose_name = "Emma import"
+        verbose_name_plural = "Emma imports"
+
+    def __str__(self):
+        return f"{self.source} import {self.started_at:%Y-%m-%d %H:%M} ({self.status})"
+
+
+class EmmaRawTransaction(TimeStampedModel):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="emma_raw_transactions"
+    )
+    import_run = models.ForeignKey(
+        ImportRun,
+        on_delete=models.SET_NULL,
+        related_name="raw_transactions",
+        null=True,
+        blank=True,
+    )
+    source_system = models.CharField(max_length=50, default=Transaction.SOURCE_EMMA)
+    source_transaction_id = models.CharField(max_length=255)
+    source_row_number = models.PositiveIntegerField()
+    source_hash = models.CharField(max_length=64, db_index=True)
+    raw_data = models.JSONField(default=dict)
+    first_seen_at = models.DateTimeField()
+    last_seen_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ["-last_seen_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "source_system", "source_transaction_id"],
+                name="uniq_emma_raw_user_source_id",
+            )
+        ]
+        indexes = [models.Index(fields=["user", "source_row_number"])]
+        verbose_name = "Emma raw transaction"
+        verbose_name_plural = "Emma raw transactions"
+
+    def __str__(self):
+        return f"{self.source_transaction_id} (row {self.source_row_number})"
 
 
 class SpendRule(TimeStampedModel):
