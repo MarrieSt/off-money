@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Transactions{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div><span class="eyebrow">YOUR MONEY, RECORDED</span><h1>Transactions</h1><p>A durable history of activity across your accounts.</p></div>
+  <span class="record-count">{{ page.paginator.count }} record{{ page.paginator.count|pluralize }}</span>
+</header>
+{% if page.object_list %}
+<div class="data-table-wrap">
+  <table class="data-table">
+    <thead><tr><th>Date</th><th>Account</th><th>Merchant / counterparty</th><th>Category</th><th class="amount-column">Amount</th></tr></thead>
+    <tbody>
+      {% for transaction in page.object_list %}
+      <tr>
+        <td>{{ transaction.transaction_date|date:"j M Y" }}</td>
+        <td><span class="table-primary">{{ transaction.account.display_name|default:transaction.account.source_name }}</span></td>
+        <td><span class="table-primary">{{ transaction.source_merchant|default:transaction.source_counterparty|default:transaction.source_custom_name|default:"—" }}</span></td>
+        <td>{{ transaction.source_category|default:"—" }}</td>
+        <td class="amount-column{% if transaction.amount < 0 %} amount-negative{% else %} amount-positive{% endif %}">{{ transaction.amount|floatformat:2 }} {{ transaction.currency }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if page.paginator.num_pages > 1 %}<nav class="pagination" aria-label="Pagination">
+  {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}" aria-label="Previous page">← Previous</a>{% else %}<span></span>{% endif %}
+  <span>Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+  {% if page.has_next %}<a href="?page={{ page.next_page_number }}" aria-label="Next page">Next →</a>{% endif %}
+</nav>{% endif %}
+{% else %}
+<section class="empty-state page-empty"><div class="empty-icon">↘</div><h2>No transactions yet</h2><p>Transactions added through Admin will appear here. Your history will stay organised by date and account.</p></section>
+{% endif %}
+{% endblock %}

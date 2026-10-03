@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Rules{% endblock %}
+{% block content %}
+<header class="page-header"><div><span class="eyebrow">PERSONAL CLASSIFICATION</span><h1>Spend rules</h1><p>Rules will shape how future analytics interpret transactions.</p></div><span class="record-count">{{ rules|length }} rule{{ rules|length|pluralize }}</span></header>
+{% if rules %}
+<div class="rule-list" aria-label="Spend rules">
+  {% for rule in rules %}
+  <article class="rule-row">
+    <div class="rule-priority">{{ rule.priority|stringformat:"02d" }}</div>
+    <div class="rule-main"><h2>{{ rule.name }}</h2><p>{{ rule.get_match_field_display }} {{ rule.get_match_operator_display|lower }} “{{ rule.match_value }}”</p></div>
+    <span class="rule-action">{{ rule.get_action_display }}</span>
+    <span class="status-indicator{% if not rule.is_active %} status-inactive{% endif %}">{{ rule.is_active|yesno:"Active,Inactive" }}</span>
+  </article>
+  {% endfor %}
+</div>
+{% else %}
+<section class="empty-state page-empty"><div class="empty-icon">⌁</div><h2>No spend rules yet</h2><p>Rules configured in Admin will be listed here. They are stored now; evaluation will be added in a later phase.</p></section>
+{% endif %}
+{% endblock %}

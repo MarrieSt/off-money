@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Sign in{% endblock %}
+{% block content %}
+<section class="login-layout">
+  <div class="login-brand-panel">
+    <a class="brand brand-light" href="#"><span class="brand-mark">M</span><span>Money</span></a>
+    <div class="login-message">
+      <span class="eyebrow">PERSONAL FINANCE, IN FOCUS</span>
+      <h1>A clearer view of your money.</h1>
+      <p>Your financial history, thoughtfully organised in one private workspace.</p>
+    </div>
+    <span class="panel-footnote">Private by design · Built for your data</span>
+  </div>
+  <div class="login-form-panel">
+    <form class="login-form" method="post">
+      {% csrf_token %}
+      <span class="eyebrow">WELCOME BACK</span>
+      <h2>Sign in to Money</h2>
+      <p class="form-intro">Use the username and password provided by your administrator.</p>
+      {% if form.errors %}<div class="form-error" role="alert">Your username or password was not recognised.</div>{% endif %}
+      <label for="id_username">Username</label>
+      <input id="id_username" name="username" type="text" autocomplete="username" required autofocus>
+      <label for="id_password">Password</label>
+      <input id="id_password" name="password" type="password" autocomplete="current-password" required>
+      {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+      <button class="primary-button" type="submit">Sign in <span aria-hidden="true">→</span></button>
+    </form>
+  </div>
+</section>
+{% endblock %}

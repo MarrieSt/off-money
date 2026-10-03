@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Accounts{% endblock %}
+{% block content %}
+<header class="page-header"><div><span class="eyebrow">CONNECTED FINANCIAL SOURCES</span><h1>Accounts</h1><p>Accounts and cards included in your Money workspace.</p></div><span class="record-count">{{ accounts|length }} account{{ accounts|length|pluralize }}</span></header>
+{% if accounts %}
+<section class="account-list" aria-label="Financial accounts">
+  {% for account in accounts %}
+  <article class="account-row">
+    <div class="account-monogram">{{ account.display_name|default:account.source_name|first|upper }}</div>
+    <div class="account-main"><h2>{{ account.display_name|default:account.source_name }}</h2><p>{{ account.institution_name|default:account.source_system|title }}{% if account.account_type %} · {{ account.account_type }}{% endif %}</p></div>
+    <span class="currency-label">{{ account.currency }}</span>
+    <span class="status-indicator{% if not account.is_active %} status-inactive{% endif %}">{{ account.is_active|yesno:"Active,Inactive" }}</span>
+  </article>
+  {% endfor %}
+</section>
+{% else %}
+<section class="empty-state page-empty"><div class="empty-icon">▤</div><h2>No accounts added</h2><p>Accounts created in Admin will appear here, ready to be connected to future transaction imports.</p></section>
+{% endif %}
+{% endblock %}

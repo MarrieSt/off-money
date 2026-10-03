@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Overview{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div><span class="eyebrow">YOUR FINANCIAL PICTURE</span><h1>Overview</h1><p>A calm, clear view of what matters.</p></div>
+  <div class="date-stamp">{{ request.user.get_full_name|default:request.user.username }}<span>Personal workspace</span></div>
+</header>
+<section class="metric-grid" aria-label="Analytics preview">
+  <article class="metric-card metric-featured"><div class="metric-top"><span>Spend yesterday</span><span class="metric-symbol">↘</span></div><div class="metric-value">—</div><p>{% if has_transactions %}Analytics not calculated yet{% else %}No transaction data yet{% endif %}</p></article>
+  <article class="metric-card"><div class="metric-top"><span>No-spend streak</span><span class="metric-symbol">✳</span></div><div class="metric-value">—</div><p>{% if has_transactions %}Analytics not calculated yet{% else %}Waiting for transaction data{% endif %}</p></article>
+  <article class="metric-card"><div class="metric-top"><span>This month</span><span class="metric-symbol">▤</span></div><div class="metric-value">—</div><p>{% if has_transactions %}Analytics not calculated yet{% else %}Analytics will appear here{% endif %}</p></article>
+</section>
+<section class="overview-lower">
+  <div class="section-heading"><div><span class="eyebrow">ACTIVITY</span><h2>Recent transactions</h2></div><a class="text-link" href="{% url 'finance:transactions' %}">View transactions <span aria-hidden="true">→</span></a></div>
+  <div class="empty-state compact-empty">
+    <div class="empty-icon">↘</div>
+    {% if has_transactions %}
+      <h3>Your transaction history is ready</h3><p>Open Transactions to browse your imported records.</p>
+      <a class="text-link" href="{% url 'finance:transactions' %}">Browse transactions <span aria-hidden="true">→</span></a>
+    {% else %}
+      <h3>Your money workspace is ready</h3>
+      <p>No transaction data has been imported yet. The Money data model is ready for the transaction feed.</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

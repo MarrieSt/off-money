@@ -1,0 +1,39 @@
+{% load static %}
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#071b33">
+  <title>{% block title %}Money{% endblock %} | Money</title>
+  <link rel="stylesheet" href="{% static 'money/css/site.css' %}">
+</head>
+<body class="{% if request.user.is_authenticated %}app-shell{% else %}auth-shell{% endif %}">
+  {% if request.user.is_authenticated %}
+    <aside class="sidebar">
+      <a class="brand" href="{% url 'finance:home' %}" aria-label="Money overview">
+        <span class="brand-mark">M</span><span>Money</span>
+      </a>
+      <div class="sidebar-label">Workspace</div>
+      <nav class="primary-nav" aria-label="Main navigation">
+        <a href="{% url 'finance:home' %}" class="nav-link{% if request.resolver_match.url_name == 'home' %} is-active{% endif %}"><span class="nav-icon">01</span>Overview</a>
+        <a href="{% url 'finance:transactions' %}" class="nav-link{% if request.resolver_match.url_name == 'transactions' %} is-active{% endif %}"><span class="nav-icon">02</span>Transactions</a>
+        <a href="{% url 'finance:accounts' %}" class="nav-link{% if request.resolver_match.url_name == 'accounts' %} is-active{% endif %}"><span class="nav-icon">03</span>Accounts</a>
+        <a href="{% url 'finance:rules' %}" class="nav-link{% if request.resolver_match.url_name == 'rules' %} is-active{% endif %}"><span class="nav-icon">04</span>Rules</a>
+        {% if request.user.is_staff %}<a href="{% url 'admin:index' %}" class="nav-link"><span class="nav-icon">05</span>Admin</a>{% endif %}
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-avatar">{{ request.user.username|first|upper }}</div>
+        <div class="user-meta"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><span>Personal workspace</span></div>
+        <form method="post" action="{% url 'logout' %}">
+          {% csrf_token %}
+          <button class="logout-button" type="submit" aria-label="Log out" title="Log out">↗</button>
+        </form>
+      </div>
+    </aside>
+  {% endif %}
+  <main class="main-content{% if not request.user.is_authenticated %} auth-content{% endif %}">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
