@@ -13,22 +13,27 @@
   <div class="spending-heading">
     <div class="spending-title-block">
       <span class="eyebrow">YOUR ACTIVITY</span>
-      <h2 id="spending-title">Spending</h2>
+      <div class="spending-title-line">
+        <h2 id="spending-title">Spending</h2>
+        <strong class="spending-inline-total" data-total>—</strong>
+      </div>
+      <span class="spending-range">Total spend · <span data-range>GBP</span></span>
     </div>
-    <div class="granularity-control" role="group" aria-label="Time granularity">
-      <button type="button" data-granularity="day" aria-pressed="true">Day</button>
-      <button type="button" data-granularity="week" aria-pressed="false">Week</button>
-      <button type="button" data-granularity="month" aria-pressed="false">Month</button>
+    <div class="spending-header-controls">
+      <label class="stack-control">Stack by
+        <select data-stack-by aria-label="Stack by">
+          <option value="category">Category</option>
+          <option value="account">Account</option>
+        </select>
+      </label>
+      <div class="granularity-control" role="group" aria-label="Time granularity">
+        <button type="button" data-granularity="day" aria-pressed="true">Day</button>
+        <button type="button" data-granularity="week" aria-pressed="false">Week</button>
+        <button type="button" data-granularity="month" aria-pressed="false">Month</button>
+      </div>
     </div>
   </div>
   <div class="spending-summary">
-    <div class="spending-total"><strong data-total>—</strong><span>Total spend · <span data-range>GBP</span></span></div>
-    <label class="stack-control">Stack by
-      <select data-stack-by aria-label="Stack by">
-        <option value="category">Category</option>
-        <option value="account">Account</option>
-      </select>
-    </label>
     <div class="window-navigation" aria-label="Historical navigation">
       <button type="button" data-previous aria-label="Previous seven periods" title="Previous seven periods">‹</button>
       <button type="button" data-current hidden>Today</button>

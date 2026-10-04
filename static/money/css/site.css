@@ -109,16 +109,17 @@ h1, h2, h3, p { margin-top: 0; }
 
 [hidden] { display: none !important; }
 .spending-widget { position: relative; max-width: 1120px; margin: 0 auto 24px; padding: 20px 22px 17px; border: 1px solid var(--money-border); border-radius: 7px; background: #fff; }
-.spending-heading, .spending-summary { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.spending-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
 .spending-title-block .eyebrow { color: var(--money-blue); }
-.spending-title-block h2 { margin: 5px 0 0; color: var(--money-navy); font-family: Georgia, "Times New Roman", serif; font-size: 23px; font-weight: 500; }
+.spending-title-line { display: flex; align-items: baseline; gap: 13px; margin-top: 4px; }
+.spending-title-block h2 { margin: 0; color: var(--money-navy); font-family: Georgia, "Times New Roman", serif; font-size: 23px; font-weight: 500; }
+.spending-inline-total { color: var(--money-navy); font-family: Georgia, "Times New Roman", serif; font-size: 22px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.spending-range { display: block; margin-top: 3px; color: var(--money-muted); font-size: 10px; }
+.spending-header-controls { display: flex; align-items: center; gap: 15px; }
 .granularity-control { display: inline-flex; gap: 3px; padding: 3px; border: 1px solid var(--money-border); border-radius: 6px; background: #f5f8fb; }
 .granularity-control button { min-width: 54px; height: 30px; padding: 0 10px; border: 0; border-radius: 4px; color: #607187; background: transparent; cursor: pointer; font-size: 11px; font-weight: 600; }
 .granularity-control button[aria-pressed="true"] { color: white; background: var(--money-blue); }
-.spending-summary { justify-content: flex-start; margin-top: 16px; }
-.spending-total { display: grid; min-width: 190px; gap: 4px; }
-.spending-total strong { color: var(--money-navy); font-family: Georgia, "Times New Roman", serif; font-size: 26px; font-weight: 500; font-variant-numeric: tabular-nums; }
-.spending-total span { color: var(--money-muted); font-size: 10px; }
+.spending-summary { display: flex; justify-content: flex-end; margin-top: 8px; }
 .stack-control { display: inline-flex; align-items: center; gap: 8px; color: var(--money-muted); font-size: 11px; }
 .stack-control select { height: 34px; padding: 0 28px 0 10px; border: 1px solid var(--money-border); border-radius: 5px; color: var(--money-navy); background-color: white; font-size: 11px; font-weight: 600; }
 .window-navigation { display: flex; align-items: center; gap: 4px; margin-left: auto; }
@@ -234,9 +235,9 @@ h1, h2, h3, p { margin-top: 0; }
   .login-form-panel { align-items: start; padding: 41px 26px; }
   .spending-widget { padding: 16px 13px 15px; }
   .spending-heading { align-items: start; flex-wrap: wrap; }
+  .spending-header-controls { max-width: 100%; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+  .spending-inline-total { font-size: 20px; }
   .spending-summary { flex-wrap: wrap; gap: 10px 13px; }
-  .spending-total { min-width: 150px; }
-  .spending-total strong { font-size: 23px; }
   .window-navigation { margin-left: auto; }
   .spending-chart { min-height: 247px; grid-template-columns: 47px minmax(0, 1fr); gap: 6px; }
   .chart-axis, .chart-plot { height: 215px; }
@@ -255,8 +256,6 @@ h1, h2, h3, p { margin-top: 0; }
   .currency-label { display: none; }
   .stack-control { gap: 5px; font-size: 10px; }
   .stack-control select { height: 31px; padding-left: 7px; font-size: 10px; }
-  .spending-total { min-width: 125px; }
-  .spending-total span { font-size: 9px; }
   .granularity-control button { min-width: 47px; padding: 0 7px; }
   .chart-axis { font-size: 8px; }
 }
