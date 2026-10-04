@@ -218,24 +218,36 @@ class ReconciliationServiceTests(TestCase):
         self.assertEqual(manual.requested_end_date, date(2026, 10, 3))
 
     @patch("money.services.reconciliation.fetch_worksheet_rows")
-    def test_scheduled_intraday_accepts_railway_start_four_minutes_after_target(self, fetch_rows):
-        now = datetime(2026, 10, 4, 15, 4, 11, tzinfo=ZoneInfo("Europe/London"))
+    def test_scheduled_intraday_accepts_railway_start_four_minutes_after_utc_target(self, fetch_rows):
+        utc_now = datetime(2026, 10, 4, 15, 4, 11, tzinfo=ZoneInfo("UTC"))
         fetch_rows.return_value = []
 
-        run = reconcile_transactions(mode="intraday", scheduled=True, now=now)
+        for now in (utc_now, utc_now.astimezone(ZoneInfo("Europe/London"))):
+            with self.subTest(now=now):
+                run = reconcile_transactions(mode="intraday", scheduled=True, now=now)
+                self.assertEqual(run.status, ImportRun.Status.SUCCESS)
 
-        self.assertEqual(run.status, ImportRun.Status.SUCCESS)
-        fetch_rows.assert_called_once()
+        self.assertEqual(fetch_rows.call_count, 2)
 
     @patch("money.services.reconciliation.fetch_worksheet_rows")
-    def test_scheduled_intraday_skips_after_ten_minute_grace(self, fetch_rows):
-        now = datetime(2026, 10, 4, 15, 11, tzinfo=ZoneInfo("Europe/London"))
+    def test_scheduled_intraday_accepts_each_configured_utc_cron_hour(self, fetch_rows):
+        fetch_rows.return_value = []
+        for hour in (6, 9, 12, 15, 18, 21, 22):
+            with self.subTest(hour=hour):
+                now = datetime(2026, 10, 4, hour, 5, tzinfo=ZoneInfo("UTC"))
+                run = reconcile_transactions(mode="intraday", scheduled=True, now=now)
+                self.assertEqual(run.status, ImportRun.Status.SUCCESS)
 
-        run = reconcile_transactions(mode="intraday", scheduled=True, now=now)
-
-        self.assertIsNone(run)
+    @patch("money.services.reconciliation.fetch_worksheet_rows")
+    def test_scheduled_intraday_skips_unconfigured_utc_hours_and_after_grace(self, fetch_rows):
+        for now in (
+            datetime(2026, 10, 4, 8, 5, tzinfo=ZoneInfo("UTC")),
+            datetime(2026, 10, 4, 15, 11, tzinfo=ZoneInfo("UTC")),
+        ):
+            with self.subTest(now=now):
+                run = reconcile_transactions(mode="intraday", scheduled=True, now=now)
+                self.assertIsNone(run)
         fetch_rows.assert_not_called()
-        self.assertEqual(ImportRun.objects.count(), 0)
 
     @patch("money.services.reconciliation.fetch_worksheet_rows")
     def test_monthly_full_accepts_utc_candidate_at_0009_london(self, fetch_rows):

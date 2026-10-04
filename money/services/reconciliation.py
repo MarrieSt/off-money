@@ -26,9 +26,10 @@ from money.services.google_sheets import fetch_worksheet_rows
 
 logger = logging.getLogger(__name__)
 LONDON = ZoneInfo("Europe/London")
+UTC = ZoneInfo("UTC")
 LOCK_KEY = 0x4D4F4E4559
 BATCH_SIZE = 1000
-INTRADAY_HOURS = {6, 9, 12, 15, 18, 21}
+INTRADAY_UTC_HOURS = {6, 9, 12, 15, 18, 21, 22}
 SCHEDULE_GRACE_SECONDS = 10 * 60
 SOURCE_CONTROLLED_FIELDS = (
     "account",
@@ -89,9 +90,10 @@ def _within_schedule_grace(now, target_hour):
 
 def _scheduled_skip_reason(mode, now):
     if mode == ImportRun.JobType.INTRADAY:
-        if any(_within_schedule_grace(now, hour) for hour in INTRADAY_HOURS):
+        utc_now = now.astimezone(UTC)
+        if any(_within_schedule_grace(utc_now, hour) for hour in INTRADAY_UTC_HOURS):
             return None
-        return "Not an intraday reconciliation time in Europe/London."
+        return "Intraday reconciliation is only due at configured UTC candidate hours (with a ten-minute grace)."
     if mode == ImportRun.JobType.DAILY:
         if now.day == 3:
             return "Daily reconciliation is superseded by monthly full reconciliation on day 3."

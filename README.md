@@ -96,7 +96,7 @@ Each non-empty sheet row is kept as the latest `EmmaRawTransaction` snapshot, ke
 - `--mode full`: authoritative full-sheet reconciliation.
 - `--start YYYY-MM-DD --end YYYY-MM-DD`: custom inclusive range.
 - `--dry-run`: read, parse, match, and report changes without writing accounts, raw rows, transactions, or missing state. The audit run itself is still recorded.
-- `--scheduled`: apply the Europe/London schedule guards. Target times accept starts up to 10 minutes late to tolerate Railway Cron startup jitter. Scheduled daily skips on day 3; an explicitly manual `--mode daily` still runs that day.
+- `--scheduled`: apply schedule guards. Intraday runs match the configured UTC candidate hours `06, 09, 12, 15, 18, 21, 22` with a 10-minute post-hour grace; these fixed UTC hours intentionally shift by one hour in London during BST. Daily and full runs remain guarded by their `Europe/London` target times. Scheduled daily skips on day 3; an explicitly manual `--mode daily` still runs that day.
 
 Examples for Railway's service shell (Nixpacks Python environment):
 
@@ -110,4 +110,4 @@ These commands are entry points only. No Railway Cron services or schedules are 
 
 Every run fetches one complete sheet snapshot, compares Emma IDs against the requested window and local IDs in that window, and uses a PostgreSQL advisory lock. A changed date is reconciled by Emma ID even if it moves across the window. Missing-state changes are suppressed if any relevant row fails or the source read fails. Missing Emma transactions are retained in the database but excluded from spending analytics; reappearing rows restore them.
 
-The same command supports Railway Cron later, but this implementation does **not** add Cron services or schedules. Use the commands manually first. When scheduling is configured, use an hourly UTC candidate schedule invoking `--scheduled`; the Europe/London guard will reconcile only at the required hours, allowing up to 10 minutes of Railway startup delay across GMT/BST.
+The same command supports Railway Cron later, but this implementation does **not** add Cron services or schedules. Use the commands manually first. For the intraday Cron expression `0 6,9,12,15,18,21,22 * * *`, invoke `--scheduled`; the guard matches those UTC candidate hours and does not adjust them for BST/GMT. Railway startup delays of up to 10 minutes are tolerated.
