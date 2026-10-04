@@ -272,14 +272,25 @@ class ReconciliationServiceTests(TestCase):
         fetch_rows.assert_not_called()
 
     @patch("money.services.reconciliation.fetch_worksheet_rows")
-    def test_monthly_full_accepts_utc_candidate_at_0009_london(self, fetch_rows):
-        now = datetime(2026, 10, 3, 0, 9, tzinfo=ZoneInfo("Europe/London"))
+    def test_monthly_full_accepts_fixed_utc_two_across_gmt_and_bst(self, fetch_rows):
         fetch_rows.return_value = []
+        for now in (
+            datetime(2026, 1, 3, 2, 9, tzinfo=ZoneInfo("Europe/London")),
+            datetime(2026, 7, 3, 3, 9, tzinfo=ZoneInfo("Europe/London")),
+        ):
+            with self.subTest(now=now):
+                run = reconcile_transactions(mode="full", scheduled=True, now=now)
+                self.assertEqual(run.status, ImportRun.Status.SUCCESS)
+        self.assertEqual(fetch_rows.call_count, 2)
+
+    @patch("money.services.reconciliation.fetch_worksheet_rows")
+    def test_monthly_full_skips_outside_fixed_utc_two_window(self, fetch_rows):
+        now = datetime(2026, 10, 3, 0, 9, tzinfo=ZoneInfo("Europe/London"))
 
         run = reconcile_transactions(mode="full", scheduled=True, now=now)
 
-        self.assertEqual(run.status, ImportRun.Status.SUCCESS)
-        fetch_rows.assert_called_once()
+        self.assertIsNone(run)
+        fetch_rows.assert_not_called()
 
     @patch("money.services.reconciliation.fetch_worksheet_rows")
     def test_locked_reconciliation_is_audited_as_skipped(self, fetch_rows):

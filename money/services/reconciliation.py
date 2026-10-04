@@ -101,9 +101,11 @@ def _scheduled_skip_reason(mode, now):
             return None
         return "Daily reconciliation is only due at 02:00 or 03:00 Europe/London, with a ten-minute grace."
     if mode == ImportRun.JobType.FULL:
-        if now.day == 3 and _within_schedule_grace(now, 0):
+        if now.day == 3 and (
+            _within_schedule_grace(now, 2) or _within_schedule_grace(now, 3)
+        ):
             return None
-        return "Not the scheduled monthly full reconciliation time in Europe/London."
+        return "Monthly full reconciliation is only due at 02:00 or 03:00 Europe/London on day 3, with a ten-minute grace."
     return "Scheduled reconciliation requires a standard mode."
 
 
