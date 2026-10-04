@@ -1,14 +1,63 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Overview{% endblock %}
 {% block content %}
 <header class="page-header">
   <div><span class="eyebrow">YOUR FINANCIAL PICTURE</span><h1>Overview</h1><p>A calm, clear view of what matters.</p></div>
   <div class="date-stamp">{{ request.user.get_full_name|default:request.user.username }}<span>Personal workspace</span></div>
 </header>
-<section class="metric-grid" aria-label="Analytics preview">
-  <article class="metric-card metric-featured"><div class="metric-top"><span>Spend yesterday</span><span class="metric-symbol">↘</span></div><div class="metric-value">—</div><p>{% if has_transactions %}Analytics not calculated yet{% else %}No transaction data yet{% endif %}</p></article>
-  <article class="metric-card"><div class="metric-top"><span>No-spend streak</span><span class="metric-symbol">✳</span></div><div class="metric-value">—</div><p>{% if has_transactions %}Analytics not calculated yet{% else %}Waiting for transaction data{% endif %}</p></article>
-  <article class="metric-card"><div class="metric-top"><span>This month</span><span class="metric-symbol">▤</span></div><div class="metric-value">—</div><p>{% if has_transactions %}Analytics not calculated yet{% else %}Analytics will appear here{% endif %}</p></article>
+<section class="spending-widget" data-spending-widget
+  data-api-url="{% url 'finance:spending_api' %}"
+  data-transactions-url="{% url 'finance:spending_transactions_api' %}"
+  aria-labelledby="spending-title">
+  <div class="spending-heading">
+    <div class="spending-title-block">
+      <span class="eyebrow">YOUR ACTIVITY</span>
+      <h2 id="spending-title">Spending</h2>
+    </div>
+    <div class="granularity-control" role="group" aria-label="Time granularity">
+      <button type="button" data-granularity="day" aria-pressed="true">Day</button>
+      <button type="button" data-granularity="week" aria-pressed="false">Week</button>
+      <button type="button" data-granularity="month" aria-pressed="false">Month</button>
+    </div>
+  </div>
+  <div class="spending-summary">
+    <div class="spending-total"><strong data-total>—</strong><span>Total spend · <span data-range>GBP</span></span></div>
+    <label class="stack-control">Stack by
+      <select data-stack-by aria-label="Stack by">
+        <option value="category">Category</option>
+        <option value="account">Account</option>
+      </select>
+    </label>
+    <div class="window-navigation" aria-label="Historical navigation">
+      <button type="button" data-previous aria-label="Previous seven periods" title="Previous seven periods">‹</button>
+      <button type="button" data-current hidden>Today</button>
+      <button type="button" data-next aria-label="Next seven periods" title="Next seven periods">›</button>
+    </div>
+  </div>
+  <div class="spending-loading" data-loading aria-label="Loading spending chart">
+    <div class="skeleton-total"></div>
+    <div class="skeleton-columns"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  </div>
+  <div class="spending-error" data-error role="alert" hidden>
+    <span>Unable to load spending.</span><button type="button" class="retry-button" data-retry>Retry</button>
+  </div>
+  <div class="spending-chart-shell" data-chart-shell hidden>
+    <div class="spending-chart" data-chart role="group" aria-label="Spending chart"></div>
+    <p class="spending-empty-note" data-empty hidden>No spending in this period</p>
+  </div>
+  <div class="spending-legend" data-legend hidden></div>
+  <button type="button" class="show-all-button" data-show-all hidden>Show all</button>
+  <div class="chart-tooltip" data-tooltip role="tooltip" hidden></div>
+  <div class="drawer-backdrop" data-drawer hidden>
+    <aside class="transaction-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
+      <header class="drawer-header">
+        <div><span class="eyebrow">SPENDING DETAIL</span><h2 data-drawer-title id="drawer-title">Transactions</h2></div>
+        <button type="button" class="drawer-close" data-drawer-close aria-label="Close transactions">×</button>
+      </header>
+      <div class="drawer-body" data-drawer-body></div>
+    </aside>
+  </div>
 </section>
 <section class="overview-lower">
   <div class="section-heading"><div><span class="eyebrow">ACTIVITY</span><h2>Recent transactions</h2></div><a class="text-link" href="{% url 'finance:transactions' %}">View transactions <span aria-hidden="true">→</span></a></div>
@@ -23,4 +72,5 @@
     {% endif %}
   </div>
 </section>
+<script src="{% static 'money/js/spending-widget.js' %}" defer></script>
 {% endblock %}

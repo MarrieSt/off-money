@@ -1,7 +1,11 @@
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.http import JsonResponse
 from django.shortcuts import render
+from django.utils import timezone
+from django.views.decorators.http import require_GET
 
+from .analytics import build_spending_payload, get_spending_transactions, parse_iso_date
 from .models import FinancialAccount, SpendRule, Transaction
 
 
@@ -32,3 +36,68 @@ def accounts(request):
 def rules(request):
     user_rules = SpendRule.objects.filter(user=request.user)
     return render(request, "finance/rules.html", {"rules": user_rules})
+
+
+@require_GET
+def spending_api(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({"error": "Authentication required."}, status=401)
+    granularity = request.GET.get("granularity", "day")
+    stack_by = request.GET.get("stack_by", "category")
+    try:
+        anchor = parse_iso_date(request.GET["end_date"]) if "end_date" in request.GET else timezone.localdate()
+        payload = build_spending_payload(
+            request.user,
+            granularity=granularity,
+            stack_by=stack_by,
+            anchor=anchor,
+            today=timezone.localdate(),
+        )
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    return JsonResponse(payload)
+
+
+@require_GET
+def spending_transactions_api(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({"error": "Authentication required."}, status=401)
+    try:
+        start_date = parse_iso_date(request.GET.get("start_date"))
+        end_date = parse_iso_date(request.GET.get("end_date"))
+        if start_date > end_date:
+            raise ValueError("start_date must be on or before end_date.")
+        if (end_date - start_date).days > 366:
+            raise ValueError("The requested period is too large.")
+        if end_date > timezone.localdate():
+            raise ValueError("Future dates are not available.")
+        stack_by = request.GET.get("stack_by", "category")
+        if stack_by not in {"category", "account"}:
+            raise ValueError("stack_by must be category or account.")
+        series_key = request.GET.get("series_key") or None
+        excluded_keys = request.GET.getlist("excluded_keys")
+        if len(excluded_keys) > 6:
+            raise ValueError("At most six series may be excluded.")
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+
+    rows, has_more = get_spending_transactions(
+        request.user,
+        start_date=start_date,
+        end_date=end_date,
+        stack_by=stack_by,
+        series_key=series_key,
+        excluded_keys=excluded_keys,
+    )
+    return JsonResponse(
+        {
+            "rows": [
+                {
+                    **row,
+                    "contribution": format(row["contribution"], ".2f"),
+                }
+                for row in rows
+            ],
+            "has_more": has_more,
+        }
+    )
