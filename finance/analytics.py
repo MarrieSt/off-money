@@ -6,12 +6,10 @@ from django.db.models import (
     BooleanField,
     Case,
     CharField,
+    Count,
     DecimalField,
-    Exists,
     F,
-    OuterRef,
     Q,
-    Subquery,
     Sum,
     Value,
     When,
@@ -141,13 +139,7 @@ def _eligibility_expression(user):
         )
         for rule in rules
     ]
-    baseline = (
-        Q(account__include_in_analytics=True)
-        & (
-            Q(amount__lt=0, source_type__iexact="purchase")
-            | Q(amount__gt=0, source_linked_transaction_id__gt="")
-        )
-    )
+    baseline = Q(account__include_in_analytics=True, amount__lt=0, source_type__iexact="purchase")
     default = Case(
         When(baseline, then=Value(True)),
         default=Value(False),
@@ -161,6 +153,9 @@ def _eligible_transactions(user):
         user=user,
         currency=CURRENCY,
         source_state=Transaction.SourceState.ACTIVE,
+    ).exclude(
+        Q(amount__gt=0)
+        & (Q(source_type__iexact="refund") | Q(source_linked_transaction_id__gt=""))
     ).annotate(spend_eligible=_eligibility_expression(user)).filter(spend_eligible=True)
 
 
@@ -172,11 +167,8 @@ def _trunc_expression(granularity):
     return TruncMonth("transaction_date")
 
 
-def _category_expressions(queryset, original=None):
-    if original is None:
-        category = F("source_category")
-    else:
-        category = Subquery(original.values("source_category")[:1], output_field=CharField())
+def _category_expressions(queryset):
+    category = F("source_category")
     key = Coalesce(
         NullIf(category, Value("")),
         Value(UNCATEGORISED_KEY),
@@ -192,34 +184,19 @@ def _category_expressions(queryset, original=None):
     )
 
 
-def _account_expressions(queryset, original=None):
-    if original is None:
-        account_id = F("account_id")
-        account_display = F("account__display_name")
-        account_source = F("account__source_name")
-    else:
-        account_id = Subquery(original.values("account_id")[:1])
-        account_display = Subquery(original.values("account__display_name")[:1], output_field=CharField())
-        account_source = Subquery(original.values("account__source_name")[:1], output_field=CharField())
+def _account_expressions(queryset):
+    account_id = F("account_id")
+    account_display = F("account__display_name")
+    account_source = F("account__source_name")
     key = Cast(account_id, output_field=CharField())
     label = Coalesce(NullIf(account_display, Value("")), account_source, output_field=CharField())
     return queryset.annotate(series_key=key, series_label=label)
 
 
-def _series_expressions(queryset, stack_by, original=None):
+def _series_expressions(queryset, stack_by):
     if stack_by == "category":
-        return _category_expressions(queryset, original=original)
-    return _account_expressions(queryset, original=original)
-
-
-def _refund_origin_queryset(user, base_queryset):
-    return base_queryset.filter(
-        source_system=OuterRef("source_system"),
-        source_transaction_id=OuterRef("source_linked_transaction_id"),
-        amount__lt=0,
-        source_type__iexact="purchase",
-        spend_eligible=True,
-    )
+        return _category_expressions(queryset)
+    return _account_expressions(queryset)
 
 
 def _as_date(value):
@@ -232,45 +209,169 @@ def _contribution_groups(user, window, granularity, stack_by):
     trunc = _trunc_expression(granularity)
     base = _eligible_transactions(user)
     period_filter = {"transaction_date__range": (window["start"], window["end"])}
-    regular = base.filter(**period_filter).exclude(
-        Q(amount__gt=0) & Q(source_linked_transaction_id__gt="")
-    )
-    regular = _series_expressions(regular, stack_by).annotate(
+    eligible = base.filter(**period_filter)
+    eligible = _series_expressions(eligible, stack_by).annotate(
         period=trunc,
         contribution=Abs(F("amount")),
     )
-    grouped = list(
-        regular.values("period", "series_key", "series_label")
+    return list(
+        eligible.values("period", "series_key", "series_label")
         .annotate(total=Sum("contribution"))
         .order_by()
     )
-
-    origins = _refund_origin_queryset(user, base)
-    refunds = base.filter(
-        **period_filter,
-        amount__gt=0,
-        source_linked_transaction_id__gt="",
-    ).annotate(
-        linked_purchase=Exists(origins),
-        original_category=Subquery(origins.values("source_category")[:1], output_field=CharField()),
-        original_account_id=Subquery(origins.values("account_id")[:1]),
-        original_account_display=Subquery(origins.values("account__display_name")[:1], output_field=CharField()),
-        original_account_source=Subquery(origins.values("account__source_name")[:1], output_field=CharField()),
-    ).filter(linked_purchase=True)
-    refunds = _series_expressions(refunds, stack_by, original=origins).annotate(
-        period=trunc,
-        contribution=-F("amount"),
-    )
-    grouped.extend(
-        refunds.values("period", "series_key", "series_label")
-        .annotate(total=Sum("contribution"))
-        .order_by()
-    )
-    return grouped
 
 
 def _money_string(value):
     return format(value.quantize(Decimal("0.01")), "f")
+
+
+def behaviour_band(total):
+    total = Decimal(total)
+    if total == 0:
+        return "zero", "No-spend day"
+    if total <= Decimal("50.00"):
+        return "low", "Low-spend day"
+    if total <= Decimal("150.00"):
+        return "medium", "Higher-spend day"
+    return "high", "High-spend day"
+
+
+def build_behaviour_calendar_payload(user, month_anchor, today):
+    month_start = month_anchor.replace(day=1)
+    current_month = today.replace(day=1)
+    if month_start > current_month:
+        raise ValueError("Future months are not available.")
+
+    month_end = date(month_start.year, month_start.month, monthrange(month_start.year, month_start.month)[1])
+    data_end = min(month_end, today)
+    daily_rows = (
+        _eligible_transactions(user)
+        .filter(transaction_date__range=(month_start, data_end))
+        .annotate(calendar_day=TruncDate("transaction_date"))
+        .values("calendar_day")
+        .annotate(total=Sum(Abs(F("amount"))), transaction_count=Count("pk"))
+        .order_by("calendar_day")
+    )
+    daily = {
+        row["calendar_day"]: {
+            "total": row["total"] or Decimal("0"),
+            "transaction_count": row["transaction_count"],
+        }
+        for row in daily_rows
+    }
+
+    transactions = (
+        _eligible_transactions(user)
+        .filter(transaction_date__range=(month_start, data_end))
+        .select_related("account")
+        .order_by("transaction_date", "pk")
+    )
+    mini_bars = {}
+    for item in transactions:
+        mini_bars.setdefault(item.transaction_date, []).append(
+            {
+                "amount": abs(item.amount),
+                "category": item.source_category or "Uncategorised",
+                "description": item.description or item.source_merchant or item.source_counterparty or "Transaction",
+            }
+        )
+
+    days = []
+    for day_number in range(1, month_end.day + 1):
+        current_date = date(month_start.year, month_start.month, day_number)
+        is_future = current_date > today
+        totals = daily.get(current_date)
+        total = totals["total"] if totals else Decimal("0")
+        count = totals["transaction_count"] if totals else 0
+        if is_future:
+            band, behavior = "future", "Future day"
+            day_total = None
+        else:
+            band, behavior = behaviour_band(total)
+            day_total = _money_string(total)
+
+        entries = mini_bars.get(current_date, [])
+        entries.sort(key=lambda item: item["amount"], reverse=True)
+        if len(entries) > 8:
+            retained = entries[:7]
+            remainder = entries[7:]
+            retained.append(
+                {
+                    "amount": sum((entry["amount"] for entry in remainder), Decimal("0")),
+                    "category": "Other",
+                    "description": f"{len(remainder)} other transactions",
+                    "aggregate_count": len(remainder),
+                }
+            )
+            entries = retained
+        max_bar = max((entry["amount"] for entry in entries), default=Decimal("0"))
+        bars = [
+            {
+                "amount": _money_string(entry["amount"]),
+                "category": entry["category"],
+                "description": entry["description"],
+                "height": max(12, int(entry["amount"] / max_bar * 100)) if max_bar else 0,
+                "aggregate_count": entry.get("aggregate_count", 1),
+            }
+            for entry in entries
+        ]
+        days.append(
+            {
+                "date": current_date.isoformat(),
+                "day_number": day_number,
+                "in_month": True,
+                "is_future": is_future,
+                "is_today": current_date == today,
+                "total_spend": day_total,
+                "transaction_count": 0 if is_future else count,
+                "band": band,
+                "behavior": behavior,
+                "bars": [] if is_future else bars,
+            }
+        )
+
+    return {
+        "month": month_start.strftime("%Y-%m"),
+        "month_label": month_start.strftime("%B %Y"),
+        "today": today.isoformat(),
+        "is_current_month": month_start == current_month,
+        "can_navigate_forward": month_start < current_month,
+        "currency": CURRENCY,
+        "days": days,
+    }
+
+
+def get_behaviour_day_details(user, selected_date):
+    query = (
+        _eligible_transactions(user)
+        .filter(transaction_date=selected_date)
+        .select_related("account")
+        .order_by("amount", "pk")
+    )
+    transactions = [
+        {
+            "id": item.pk,
+            "date": item.transaction_date.isoformat(),
+            "description": item.description or item.source_merchant or item.source_counterparty or "Transaction",
+            "merchant": item.merchant_name or item.source_merchant or item.source_counterparty,
+            "category": item.source_category or "Uncategorised",
+            "account": item.account.display_name or item.account.source_name,
+            "amount": _money_string(abs(item.amount)),
+            "currency": item.currency,
+        }
+        for item in query
+    ]
+    total = sum((Decimal(item["amount"]) for item in transactions), Decimal("0"))
+    band, behavior = behaviour_band(total)
+    return {
+        "date": selected_date.isoformat(),
+        "total_spend": _money_string(total),
+        "currency": CURRENCY,
+        "transaction_count": len(transactions),
+        "band": band,
+        "behavior": behavior,
+        "transactions": transactions,
+    }
 
 
 def _bucket_key(value):
@@ -368,23 +469,7 @@ def build_spending_payload(user, granularity, stack_by, anchor, today):
 def get_spending_transactions(user, start_date, end_date, stack_by, series_key=None, excluded_keys=()):
     base = _eligible_transactions(user)
     date_filter = {"transaction_date__range": (start_date, end_date)}
-    regular = base.filter(**date_filter).exclude(
-        Q(amount__gt=0) & Q(source_linked_transaction_id__gt="")
-    )
-    regular = _series_expressions(regular, stack_by).select_related("account")
-    origins = _refund_origin_queryset(user, base)
-    refunds = base.filter(
-        **date_filter,
-        amount__gt=0,
-        source_linked_transaction_id__gt="",
-    ).annotate(
-        linked_purchase=Exists(origins),
-        original_category=Subquery(origins.values("source_category")[:1], output_field=CharField()),
-        original_account_id=Subquery(origins.values("account_id")[:1]),
-        original_account_display=Subquery(origins.values("account__display_name")[:1], output_field=CharField()),
-        original_account_source=Subquery(origins.values("account__source_name")[:1], output_field=CharField()),
-    ).filter(linked_purchase=True)
-    refunds = _series_expressions(refunds, stack_by, original=origins).select_related("account")
+    eligible = _series_expressions(base.filter(**date_filter), stack_by).select_related("account")
 
     def matches_series(transaction_record):
         key = transaction_record.series_key
@@ -393,7 +478,7 @@ def get_spending_transactions(user, start_date, end_date, stack_by, series_key=N
         return series_key is None or key == series_key
 
     events = []
-    for item in regular:
+    for item in eligible:
         if not matches_series(item):
             continue
         events.append(
@@ -406,27 +491,6 @@ def get_spending_transactions(user, start_date, end_date, stack_by, series_key=N
                 "category": item.source_category or "Uncategorised",
                 "contribution": abs(item.amount),
                 "is_refund": False,
-            }
-        )
-    for item in refunds:
-        if not matches_series(item):
-            continue
-        if stack_by == "account":
-            account_label = item.series_label
-            category_label = item.original_category or "Uncategorised"
-        else:
-            account_label = item.original_account_display or item.original_account_source
-            category_label = item.series_label
-        events.append(
-            {
-                "id": item.pk,
-                "date": item.transaction_date.isoformat(),
-                "description": item.description or item.source_merchant or item.source_counterparty or "Refund",
-                "merchant": item.merchant_name or item.source_merchant or item.source_counterparty,
-                "account": account_label,
-                "category": category_label,
-                "contribution": -item.amount,
-                "is_refund": True,
             }
         )
     events.sort(key=lambda item: (item["date"], item["id"]), reverse=True)

@@ -148,7 +148,7 @@ class SpendingAnalyticsTests(TestCase):
         self.assertEqual(payload["total"], "25.00")
         self.assertEqual([series["label"] for series in payload["series"]], ["Reimbursement"])
 
-    def test_refund_is_on_refund_date_but_uses_original_stack(self):
+    def test_refund_is_ignored_in_spending_totals(self):
         purchase = self.add_transaction(
             date=self.today - timedelta(days=2),
             amount="-40.00",
@@ -166,14 +166,14 @@ class SpendingAnalyticsTests(TestCase):
 
         payload = self.get_payload(stack_by="category")
 
-        self.assertEqual(payload["total"], "25.00")
+        self.assertEqual(payload["total"], "40.00")
         self.assertEqual([series["label"] for series in payload["series"]], ["Electronics"])
         today_bucket = payload["buckets"][-1]
-        self.assertEqual(today_bucket["total"], "-15.00")
+        self.assertEqual(today_bucket["total"], "0.00")
         self.assertEqual(today_bucket["segments"][0]["label"], "Electronics")
-        self.assertEqual(today_bucket["segments"][0]["value"], "-15.00")
+        self.assertEqual(today_bucket["segments"][0]["value"], "0.00")
 
-    def test_refund_drilldown_uses_original_category_and_account(self):
+    def test_refund_is_omitted_from_spending_drilldown(self):
         purchase = self.add_transaction(
             date=self.today - timedelta(days=2),
             amount="-40.00",
@@ -207,12 +207,7 @@ class SpendingAnalyticsTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200, response.content)
-        refund_row = response.json()["rows"][0]
-        self.assertEqual(refund_row["id"], refund.pk)
-        self.assertEqual(refund_row["contribution"], "-15.00")
-        self.assertTrue(refund_row["is_refund"])
-        self.assertEqual(refund_row["category"], "Electronics")
-        self.assertEqual(refund_row["account"], "Everyday")
+        self.assertEqual(response.json()["rows"], [])
 
     def test_top_six_and_other_are_ranked_over_window(self):
         for index in range(7):

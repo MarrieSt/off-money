@@ -42,6 +42,8 @@ class ApplicationAccessTests(TestCase):
         response = self.client.get(reverse("finance:home"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Overview")
+        self.assertContains(response, "GOOD BEHAVIOUR")
+        self.assertContains(response, "behaviour-calendar.js")
         self.assertContains(response, "No transaction data has been imported yet")
         self.assertContains(response, "—")
 

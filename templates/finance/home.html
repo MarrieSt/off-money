@@ -64,6 +64,48 @@
     </aside>
   </div>
 </section>
+<section class="behaviour-calendar" data-behaviour-calendar
+  data-month-url="{% url 'finance:behaviour_calendar_api' %}"
+  data-day-url="{% url 'finance:behaviour_day_api' %}"
+  data-transactions-url="{% url 'finance:transactions' %}"
+  aria-labelledby="behaviour-calendar-title">
+  <header class="behaviour-calendar-header">
+    <div>
+      <span class="eyebrow">GOOD BEHAVIOUR</span>
+      <h2 id="behaviour-calendar-title" data-calendar-month>—</h2>
+    </div>
+    <div class="calendar-navigation" aria-label="Calendar navigation">
+      <button type="button" data-calendar-previous aria-label="Previous month" title="Previous month">‹</button>
+      <button type="button" data-calendar-next aria-label="Next month" title="Next month">›</button>
+      <button type="button" data-calendar-today>Today</button>
+    </div>
+  </header>
+  <div class="calendar-error" data-calendar-error role="alert" hidden>
+    <span>Unable to load calendar.</span><button type="button" data-calendar-retry>Retry</button>
+  </div>
+  <div class="calendar-loading" data-calendar-loading aria-label="Loading behaviour calendar">
+    <div class="calendar-skeleton-grid"></div>
+  </div>
+  <div class="behaviour-calendar-content" data-calendar-content hidden>
+    <div class="calendar-grid-wrap">
+      <div class="calendar-weekdays" aria-hidden="true">
+        <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+      </div>
+      <div class="behaviour-days" data-calendar-days role="group" aria-label="Monthly spending behaviour"></div>
+    </div>
+    <aside class="calendar-day-detail" data-calendar-detail hidden aria-labelledby="calendar-detail-title">
+      <header class="calendar-detail-header">
+        <div><span class="eyebrow">DAY DETAIL</span><h3 id="calendar-detail-title" data-detail-date>—</h3></div>
+        <button type="button" data-detail-close aria-label="Close day details">×</button>
+      </header>
+      <div class="calendar-detail-total" data-detail-total></div>
+      <p class="calendar-detail-behavior" data-detail-behavior></p>
+      <p class="calendar-detail-empty" data-detail-empty hidden>No qualifying spending transactions on this day.</p>
+      <div class="calendar-detail-transactions" data-detail-transactions></div>
+      <a class="calendar-view-transactions" data-view-transactions href="{% url 'finance:transactions' %}">View all transactions <span aria-hidden="true">→</span></a>
+    </aside>
+  </div>
+</section>
 <section class="overview-lower">
   <div class="section-heading"><div><span class="eyebrow">ACTIVITY</span><h2>Recent transactions</h2></div><a class="text-link" href="{% url 'finance:transactions' %}">View transactions <span aria-hidden="true">→</span></a></div>
   <div class="empty-state compact-empty">
@@ -78,4 +120,5 @@
   </div>
 </section>
 <script src="{% static 'money/js/spending-widget.js' %}" defer></script>
+<script src="{% static 'money/js/behaviour-calendar.js' %}" defer></script>
 {% endblock %}

@@ -1,13 +1,20 @@
 import json
+from datetime import date
 
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.http import JsonResponse
+from django.http import HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET
 
-from .analytics import build_spending_payload, get_spending_transactions, parse_iso_date
+from .analytics import (
+    build_behaviour_calendar_payload,
+    build_spending_payload,
+    get_behaviour_day_details,
+    get_spending_transactions,
+    parse_iso_date,
+)
 from .models import FinancialAccount, SpendRule, Transaction
 
 
@@ -19,13 +26,24 @@ def home(request):
 
 @login_required
 def transactions(request):
+    transaction_list = Transaction.objects.filter(user=request.user)
+    selected_date = request.GET.get("date")
+    if selected_date:
+        try:
+            transaction_list = transaction_list.filter(transaction_date=parse_iso_date(selected_date))
+        except ValueError as exc:
+            return HttpResponseBadRequest(str(exc))
     transaction_list = (
-        Transaction.objects.filter(user=request.user)
+        transaction_list
         .select_related("account")
         .order_by("-transaction_date", "-id")
     )
     page = Paginator(transaction_list, 25).get_page(request.GET.get("page"))
-    return render(request, "finance/transactions.html", {"page": page})
+    return render(
+        request,
+        "finance/transactions.html",
+        {"page": page, "selected_date": selected_date},
+    )
 
 
 @login_required
@@ -122,3 +140,36 @@ def spending_transactions_api(request):
             "has_more": has_more,
         }
     )
+
+
+@require_GET
+def behaviour_calendar_api(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({"error": "Authentication required."}, status=401)
+    month_value = request.GET.get("month")
+    try:
+        if month_value:
+            month_start = date.fromisoformat(f"{month_value}-01")
+        else:
+            month_start = timezone.localdate().replace(day=1)
+        payload = build_behaviour_calendar_payload(
+            request.user,
+            month_anchor=month_start,
+            today=timezone.localdate(),
+        )
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    return JsonResponse(payload)
+
+
+@require_GET
+def behaviour_day_api(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({"error": "Authentication required."}, status=401)
+    try:
+        selected_date = parse_iso_date(request.GET.get("date"))
+        if selected_date > timezone.localdate():
+            raise ValueError("Future dates are not available.")
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    return JsonResponse(get_behaviour_day_details(request.user, selected_date))
