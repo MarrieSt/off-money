@@ -157,9 +157,11 @@ def _eligibility_expression(user):
 
 
 def _eligible_transactions(user):
-    return Transaction.objects.filter(user=user, currency=CURRENCY).annotate(
-        spend_eligible=_eligibility_expression(user)
-    ).filter(spend_eligible=True)
+    return Transaction.objects.filter(
+        user=user,
+        currency=CURRENCY,
+        source_state=Transaction.SourceState.ACTIVE,
+    ).annotate(spend_eligible=_eligibility_expression(user)).filter(spend_eligible=True)
 
 
 def _trunc_expression(granularity):

@@ -46,6 +46,10 @@ class FinancialAccount(TimeStampedModel):
 class Transaction(TimeStampedModel):
     SOURCE_EMMA = "emma"
 
+    class SourceState(models.TextChoices):
+        ACTIVE = "active", "Active"
+        MISSING = "missing", "Missing"
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="transactions"
     )
@@ -53,6 +57,9 @@ class Transaction(TimeStampedModel):
         FinancialAccount, on_delete=models.PROTECT, related_name="transactions"
     )
     source_system = models.CharField(max_length=50, default=SOURCE_EMMA)
+    source_state = models.CharField(
+        max_length=10, choices=SourceState.choices, default=SourceState.ACTIVE
+    )
     source_transaction_id = models.CharField(max_length=255, null=True, blank=True)
     source_content_hash = models.CharField(max_length=64, blank=True)
     transaction_date = models.DateField()
@@ -105,13 +112,28 @@ class Transaction(TimeStampedModel):
 
 
 class ImportRun(models.Model):
+    class JobType(models.TextChoices):
+        INTRADAY = "intraday", "Intraday"
+        DAILY = "daily", "Daily rolling"
+        FULL = "full", "Full reconciliation"
+        MANUAL = "manual", "Manual range"
+
+    class TriggerType(models.TextChoices):
+        SCHEDULED = "scheduled", "Scheduled"
+        MANUAL_CLI = "manual_cli", "Manual CLI"
+
     class Status(models.TextChoices):
         RUNNING = "running", "Running"
         SUCCESS = "success", "Success"
         PARTIAL = "partial", "Partial"
         FAILED = "failed", "Failed"
+        SKIPPED = "skipped", "Skipped"
 
     source = models.CharField(max_length=50, default=Transaction.SOURCE_EMMA)
+    job_type = models.CharField(max_length=10, choices=JobType.choices, default=JobType.MANUAL)
+    trigger_type = models.CharField(
+        max_length=12, choices=TriggerType.choices, default=TriggerType.MANUAL_CLI
+    )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -122,12 +144,21 @@ class ImportRun(models.Model):
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.RUNNING)
     started_at = models.DateTimeField()
     finished_at = models.DateTimeField(null=True, blank=True)
+    requested_start_date = models.DateField(null=True, blank=True)
+    requested_end_date = models.DateField(null=True, blank=True)
     rows_read = models.PositiveIntegerField(default=0)
     rows_created = models.PositiveIntegerField(default=0)
     rows_updated = models.PositiveIntegerField(default=0)
     rows_skipped = models.PositiveIntegerField(default=0)
     rows_failed = models.PositiveIntegerField(default=0)
+    transactions_created = models.PositiveIntegerField(default=0)
+    transactions_updated = models.PositiveIntegerField(default=0)
+    transactions_unchanged = models.PositiveIntegerField(default=0)
+    transactions_missing = models.PositiveIntegerField(default=0)
+    transactions_restored = models.PositiveIntegerField(default=0)
+    duration_ms = models.PositiveIntegerField(null=True, blank=True)
     error_message = models.TextField(blank=True)
+    error_summary = models.TextField(blank=True)
 
     class Meta:
         ordering = ["-started_at"]

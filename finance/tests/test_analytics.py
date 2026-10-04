@@ -97,6 +97,16 @@ class SpendingAnalyticsTests(TestCase):
             ["Food"],
         )
 
+    def test_missing_source_transactions_are_excluded_from_spend(self):
+        record = self.add_transaction(amount="-27.50", source_id="missing-source-row")
+        record.source_state = Transaction.SourceState.MISSING
+        record.save(update_fields=["source_state"])
+
+        payload = self.get_payload()
+
+        self.assertEqual(payload["total"], "0.00")
+        self.assertEqual(payload["series"], [])
+
     def test_active_rules_override_default_in_priority_order(self):
         self.add_transaction(amount="-10.00", category="Food", source_id="food")
         self.add_transaction(

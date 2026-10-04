@@ -12,6 +12,10 @@ class Command(BaseCommand):
         except Exception as exc:
             raise CommandError(str(exc)) from exc
 
+        if run is None:
+            self.stdout.write("Full Emma reconciliation was not started.")
+            return
+
         self.stdout.write(
             self.style.SUCCESS(
                 "Emma import {status}: {rows_read} read, {rows_created} created, "

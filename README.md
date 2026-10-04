@@ -1,6 +1,6 @@
 # Money
 
-Money is a standalone Django application for personal finance history and, in future phases, day-by-day spending analytics. It is independent of Culture and has its own PostgreSQL database, authentication model, migrations, and deployment configuration. Phase 1 provides the data foundation and authenticated application shell. Phase 2 adds Emma Google Sheets ingestion, raw-row traceability, import history, and operational tooling. Analytics calculations remain out of scope.
+Money is a standalone Django application for personal finance history and day-by-day spending analytics. It is independent of Culture and has its own PostgreSQL database, authentication model, migrations, and deployment configuration. The app includes Emma Sheets ingestion, reconciliation, run history, and the spending dashboard. Railway Cron services are not configured by this repository change.
 
 ## Requirements
 
@@ -56,6 +56,10 @@ python manage.py makemigrations
 python manage.py migrate
 python manage.py test
 python manage.py collectstatic --noinput
+python manage.py reconcile_transactions --mode intraday
+python manage.py reconcile_transactions --mode daily
+python manage.py reconcile_transactions --mode full
+python manage.py reconcile_transactions --start 2026-09-01 --end 2026-09-30 --dry-run
 ```
 
 The default database is PostgreSQL, including for tests. Start the local PostgreSQL service before running tests.
@@ -66,14 +70,14 @@ The default database is PostgreSQL, including for tests. Start the local Postgre
 2. Create a Railway service from this repository and set `DATABASE_URL`, `SECRET_KEY`, `DEBUG=False`, and `ALLOWED_HOSTS` to include the Railway hostname and `money.sokoloff.co.uk`.
 3. Set `CSRF_TRUSTED_ORIGINS=https://money.sokoloff.co.uk` (plus the Railway HTTPS origin if using it directly).
 4. Railway builds dependencies and collects static files using `railway.json`; Gunicorn serves `money.wsgi:application` and `/health/` is the health check.
-5. Run `python manage.py migrate` as a Railway one-off command before opening the service. Create the initial staff user with `python manage.py createsuperuser` as a one-off command.
+5. Run `/opt/venv/bin/python manage.py migrate` as a Railway one-off command before opening the service. Create the initial staff user with `/opt/venv/bin/python manage.py createsuperuser` as a one-off command.
 6. Attach `money.sokoloff.co.uk` to the Railway service and configure the DNS record Railway provides.
 
 The health endpoint returns `{"status":"ok","app":"money"}` and intentionally does not require a database query.
 
 ## Data model and future phases
 
-The first migration includes the independent `MoneyUser` model. Finance records are user-owned. `FinancialAccount` and `Transaction` carry a `source_system` identifier so external identities are scoped by user and source; transaction IDs may be absent for manually seeded records. Transaction amounts use decimal precision, and source fields plus `raw_data` preserve imported values. Spend rules, daily summaries, and reward records are defined, but no evaluator, aggregation, streak calculation, or reward job runs yet.
+The first migration includes the independent `MoneyUser` model. Finance records are user-owned. `FinancialAccount` and `Transaction` carry a `source_system` identifier so external identities are scoped by user and source; transaction IDs may be absent for manually seeded records. Transaction amounts use decimal precision, and source fields plus `raw_data` preserve imported values. The spending widget aggregates active GBP transactions server-side using the account inclusion flag and configured spend rules. Daily status, streak, and reward calculations are not scheduled or populated automatically.
 
 ## Emma Google Sheets import
 
@@ -81,6 +85,29 @@ The first migration includes the independent `MoneyUser` model. Finance records 
 2. Share the Emma spreadsheet with the service-account email as a Viewer. The importer requests only `https://www.googleapis.com/auth/spreadsheets.readonly` and never writes to Sheets.
 3. Set `GOOGLE_SHEETS_CREDENTIALS_JSON`, `EMMA_SPREADSHEET_ID`, `EMMA_WORKSHEET_NAME=Primary`, and `MONEY_IMPORT_USERNAME` in Railway. Store the complete service-account JSON in the Railway variable; do not commit a credential file.
 4. The importer automatically creates any missing `FinancialAccount` from each row's Account and Bank values for `MONEY_IMPORT_USERNAME`. New account currency defaults to `MONEY_DEFAULT_CURRENCY`; each canonical transaction stores the row's own Currency value. No manual account or bank setup is required.
-5. Run `python manage.py import_emma`, or sign in as staff and use **Data → Emma imports → Run Emma import**. On Railway's Nixpacks shell, use `/opt/venv/bin/python manage.py import_emma` if the shell's default `python` does not resolve to the app environment.
+5. Run `python manage.py reconcile_transactions --mode full` for a full reconciliation. `python manage.py import_emma` remains as a compatibility alias for full reconciliation. On Railway's Nixpacks shell, prefix commands with `/opt/venv/bin/python` if the shell's default `python` does not resolve to the app environment.
 
-Each non-empty sheet row is kept as the latest `EmmaRawTransaction` snapshot, keyed by user, source, and Emma ID. Emma dates use the US `MM/DD/YYYY` convention (for example, `9/1/2022` is September 1); ISO dates are also accepted. A normalized SHA256 detects source changes; the Emma ID remains the canonical transaction identity. Repeated unchanged rows are skipped, changed rows update the existing `Transaction`, and row-level failures do not stop other rows. A run is marked partial if any rows fail. Import history and raw rows are available in Admin. No scheduled Railway job is configured in this phase.
+Each non-empty sheet row is kept as the latest `EmmaRawTransaction` snapshot, keyed by user, source, and Emma ID. Emma dates use the US `MM/DD/YYYY` convention (for example, `9/1/2022` is September 1); ISO dates are also accepted. A normalized SHA256 detects source changes; the Emma ID remains the canonical transaction identity. Repeated unchanged rows are skipped, changed rows update the existing `Transaction`, and row-level failures do not stop other rows. A run is marked partial if any rows fail. Import history and raw rows are available in Admin.
+
+### Reconciliation modes
+
+- `--mode intraday`: London today and the previous three calendar days.
+- `--mode daily`: London today minus three calendar months through today.
+- `--mode full`: authoritative full-sheet reconciliation.
+- `--start YYYY-MM-DD --end YYYY-MM-DD`: custom inclusive range.
+- `--dry-run`: read, parse, match, and report changes without writing accounts, raw rows, transactions, or missing state. The audit run itself is still recorded.
+- `--scheduled`: apply the Europe/London schedule guards. Scheduled daily skips on day 3; an explicitly manual `--mode daily` still runs that day.
+
+Examples for Railway's service shell (Nixpacks Python environment):
+
+```bash
+/opt/venv/bin/python manage.py reconcile_transactions --mode intraday --scheduled
+/opt/venv/bin/python manage.py reconcile_transactions --mode daily --scheduled
+/opt/venv/bin/python manage.py reconcile_transactions --mode full --scheduled
+```
+
+These commands are entry points only. No Railway Cron services or schedules are created/configured by this repository change. The application guards scheduled invocations against the London business clock; non-due invocations exit without fetching the sheet. A running reconciliation holds a PostgreSQL advisory lock. If a process dies, the next lock owner marks abandoned `running` audit records as failed before starting its own work.
+
+Every run fetches one complete sheet snapshot, compares Emma IDs against the requested window and local IDs in that window, and uses a PostgreSQL advisory lock. A changed date is reconciled by Emma ID even if it moves across the window. Missing-state changes are suppressed if any relevant row fails or the source read fails. Missing Emma transactions are retained in the database but excluded from spending analytics; reappearing rows restore them.
+
+The same command supports Railway Cron later, but this implementation does **not** add Cron services or schedules. Use the commands manually first. When scheduling is configured, a UTC candidate schedule must invoke `--scheduled` often enough for its Europe/London guards to catch the required GMT/BST times.

@@ -1,8 +1,4 @@
-from django.contrib import admin, messages
-from django.core.exceptions import PermissionDenied
-from django.http import HttpResponseNotAllowed
-from django.shortcuts import redirect
-from django.urls import path, reverse
+from django.contrib import admin
 
 from .models import (
     DailyStatus,
@@ -14,9 +10,6 @@ from .models import (
     SpendRule,
     Transaction,
 )
-from money.services.emma_import import run_emma_import
-
-
 admin.site.site_header = "Money administration"
 admin.site.site_title = "Money Admin"
 admin.site.index_title = "Data and configuration"
@@ -46,13 +39,21 @@ class TransactionAdmin(admin.ModelAdmin):
         "amount",
         "currency",
         "account",
+        "source_state",
         "source_merchant",
         "source_counterparty",
         "source_category",
         "source_type",
         "user",
     )
-    list_filter = ("account", "source_category", "source_type", "currency", "user")
+    list_filter = (
+        "source_state",
+        "account",
+        "source_category",
+        "source_type",
+        "currency",
+        "user",
+    )
     search_fields = (
         "source_merchant",
         "source_counterparty",
@@ -140,73 +141,51 @@ class EarnedRewardAdmin(admin.ModelAdmin):
 
 @admin.register(ImportRun)
 class ImportRunAdmin(admin.ModelAdmin):
-    change_list_template = "admin/finance/importrun/change_list.html"
     list_display = (
         "started_at",
+        "job_type",
+        "trigger_type",
         "source",
         "user",
         "status",
         "rows_read",
-        "rows_created",
-        "rows_updated",
-        "rows_skipped",
+        "transactions_created",
+        "transactions_updated",
+        "transactions_unchanged",
+        "transactions_missing",
+        "transactions_restored",
         "rows_failed",
+        "duration_ms",
         "finished_at",
     )
-    list_filter = ("source", "status", "user")
-    search_fields = ("error_message", "user__username")
+    list_filter = ("job_type", "trigger_type", "source", "status", "user")
+    search_fields = ("error_summary", "error_message", "user__username")
     readonly_fields = (
         "source",
+        "job_type",
+        "trigger_type",
         "user",
         "status",
         "started_at",
         "finished_at",
+        "requested_start_date",
+        "requested_end_date",
         "rows_read",
-        "rows_created",
-        "rows_updated",
+        "transactions_created",
+        "transactions_updated",
         "rows_skipped",
         "rows_failed",
+        "transactions_unchanged",
+        "transactions_missing",
+        "transactions_restored",
+        "duration_ms",
+        "error_summary",
         "error_message",
     )
     ordering = ("-started_at",)
 
     def has_add_permission(self, request):
         return False
-
-    def get_urls(self):
-        custom_urls = [
-            path(
-                "run-emma-import/",
-                self.admin_site.admin_view(self.run_import_view),
-                name="finance_importrun_run",
-            )
-        ]
-        return custom_urls + super().get_urls()
-
-    def run_import_view(self, request):
-        if request.method != "POST":
-            return HttpResponseNotAllowed(["POST"])
-        if not self.has_change_permission(request):
-            raise PermissionDenied
-        try:
-            run = run_emma_import()
-        except Exception:
-            self.message_user(
-                request,
-                "Emma import failed. Check the configured credentials and application logs.",
-                level=messages.ERROR,
-            )
-        else:
-            self.message_user(
-                request,
-                (
-                    f"Emma import {run.status}: {run.rows_created} created, "
-                    f"{run.rows_updated} updated, {run.rows_skipped} skipped, "
-                    f"{run.rows_failed} failed."
-                ),
-                level=messages.WARNING if run.rows_failed else messages.SUCCESS,
-            )
-        return redirect(reverse("admin:finance_importrun_changelist"))
 
 
 @admin.register(EmmaRawTransaction)

@@ -6,11 +6,8 @@ from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.db import transaction
-from django.utils import timezone
 
-from finance.models import EmmaRawTransaction, FinancialAccount, ImportRun, Transaction
-from money.services.google_sheets import fetch_worksheet_rows
+from finance.models import FinancialAccount, Transaction
 
 
 logger = logging.getLogger(__name__)
@@ -197,122 +194,8 @@ def _transaction_defaults(user, account, fields, raw_data, source_hash, now, exi
     }
 
 
-def _process_row(run, user, row):
-    row_number = row["source_row_number"]
-    raw_data = row["raw_data"]
-    fields = _field_map(raw_data)
-    source_id = _value(fields, "ID")
-    if not source_id:
-        raise ImportRowError("Emma transaction ID is missing.")
-
-    now = timezone.now()
-    source_hash = hash_row(raw_data, source_system=Transaction.SOURCE_EMMA)
-    raw_record, created = EmmaRawTransaction.objects.get_or_create(
-        user=user,
-        source_system=Transaction.SOURCE_EMMA,
-        source_transaction_id=str(source_id),
-        defaults={
-            "import_run": run,
-            "source_row_number": row_number,
-            "source_hash": source_hash,
-            "raw_data": raw_data,
-            "first_seen_at": now,
-            "last_seen_at": now,
-        },
-    )
-    if not created:
-        raw_record.import_run = run
-        raw_record.source_row_number = row_number
-        raw_record.source_hash = source_hash
-        raw_record.raw_data = raw_data
-        raw_record.last_seen_at = now
-        raw_record.save(
-            update_fields=(
-                "import_run",
-                "source_row_number",
-                "source_hash",
-                "raw_data",
-                "last_seen_at",
-                "updated_at",
-            )
-        )
-
-    existing = Transaction.objects.filter(
-        user=user,
-        source_system=Transaction.SOURCE_EMMA,
-        source_transaction_id=str(source_id),
-    ).first()
-    if existing and existing.source_content_hash == source_hash:
-        return "skipped"
-
-    account = _account_for_row(user, fields)
-    defaults = _transaction_defaults(user, account, fields, raw_data, source_hash, now, existing)
-    with transaction.atomic():
-        _, was_created = Transaction.objects.update_or_create(
-            user=user,
-            source_system=Transaction.SOURCE_EMMA,
-            source_transaction_id=str(source_id),
-            defaults=defaults,
-        )
-    return "created" if was_created else "updated"
-
-
-def _finish_run(run, status, error_message=""):
-    run.status = status
-    run.finished_at = timezone.now()
-    run.error_message = error_message
-    run.save(update_fields=("status", "finished_at", "error_message"))
-
-
 def run_emma_import():
-    """Fetch Emma rows and upsert raw and canonical records for the configured user."""
-    run = ImportRun.objects.create(started_at=timezone.now())
-    logger.info("Emma import %s started", run.pk)
+    """Backward-compatible alias for a full Emma reconciliation."""
+    from money.services.reconciliation import reconcile_transactions
 
-    try:
-        user = _resolve_import_user()
-        run.user = user
-        run.save(update_fields=("user",))
-        rows = fetch_worksheet_rows()
-        run.rows_read = len(rows)
-        run.save(update_fields=("rows_read",))
-
-        for row in rows:
-            try:
-                result = _process_row(run, user, row)
-            except Exception as exc:
-                run.rows_failed += 1
-                logger.warning(
-                    "Emma import %s failed at source row %s (%s)",
-                    run.pk,
-                    row.get("source_row_number", "unknown"),
-                    type(exc).__name__,
-                )
-            else:
-                setattr(run, f"rows_{result}", getattr(run, f"rows_{result}") + 1)
-                if result == "created":
-                    logger.info("Emma import %s created a transaction", run.pk)
-                elif result == "updated":
-                    logger.info("Emma import %s updated a transaction", run.pk)
-                else:
-                    logger.info("Emma import %s skipped an unchanged row", run.pk)
-            run.save(
-                update_fields=("rows_created", "rows_updated", "rows_skipped", "rows_failed")
-            )
-
-        status = ImportRun.Status.PARTIAL if run.rows_failed else ImportRun.Status.SUCCESS
-        _finish_run(run, status)
-        logger.info(
-            "Emma import %s completed: read=%s created=%s updated=%s skipped=%s failed=%s",
-            run.pk,
-            run.rows_read,
-            run.rows_created,
-            run.rows_updated,
-            run.rows_skipped,
-            run.rows_failed,
-        )
-        return run
-    except Exception as exc:
-        _finish_run(run, ImportRun.Status.FAILED, "Import failed; see application logs.")
-        logger.error("Emma import %s failed (%s)", run.pk, type(exc).__name__)
-        raise
+    return reconcile_transactions(full=True)

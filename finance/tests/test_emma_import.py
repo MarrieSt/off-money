@@ -140,7 +140,7 @@ class EmmaImportServiceTests(TestCase):
         raw_data.update(overrides)
         return {"source_row_number": 2, "raw_data": raw_data}
 
-    @patch("money.services.emma_import.fetch_worksheet_rows")
+    @patch("money.services.reconciliation.fetch_worksheet_rows")
     def test_import_creates_raw_and_canonical_transaction(self, fetch_rows):
         fetch_rows.return_value = [self.source_row()]
 
@@ -161,7 +161,7 @@ class EmmaImportServiceTests(TestCase):
         self.assertEqual(raw_record.import_run, run)
         self.assertEqual(len(raw_record.source_hash), 64)
 
-    @patch("money.services.emma_import.fetch_worksheet_rows")
+    @patch("money.services.reconciliation.fetch_worksheet_rows")
     def test_repeated_import_is_idempotent_and_updates_last_seen(self, fetch_rows):
         fetch_rows.return_value = [self.source_row()]
         first_run = run_emma_import()
@@ -178,7 +178,7 @@ class EmmaImportServiceTests(TestCase):
         self.assertEqual(raw_record.import_run, second_run)
         self.assertGreaterEqual(raw_record.last_seen_at, previous_last_seen)
 
-    @patch("money.services.emma_import.fetch_worksheet_rows")
+    @patch("money.services.reconciliation.fetch_worksheet_rows")
     def test_changed_source_row_updates_existing_transaction(self, fetch_rows):
         fetch_rows.return_value = [self.source_row()]
         run_emma_import()
@@ -195,7 +195,7 @@ class EmmaImportServiceTests(TestCase):
         self.assertEqual(transaction_record.merchant_name, "Cafe Example Ltd")
         self.assertEqual(EmmaRawTransaction.objects.get().raw_data["Amount"], "-18.50")
 
-    @patch("money.services.emma_import.fetch_worksheet_rows")
+    @patch("money.services.reconciliation.fetch_worksheet_rows")
     def test_rerun_corrects_previously_misparsed_transaction_by_emma_id(self, fetch_rows):
         row = self.source_row(**{"Date": "9/1/2022"})
         old_run = ImportRun.objects.create(user=self.user, started_at=timezone.now())
@@ -227,7 +227,7 @@ class EmmaImportServiceTests(TestCase):
         self.assertEqual(existing.pk, Transaction.objects.get().pk)
         self.assertEqual(existing.transaction_date, date(2022, 9, 1))
 
-    @patch("money.services.emma_import.fetch_worksheet_rows")
+    @patch("money.services.reconciliation.fetch_worksheet_rows")
     def test_import_discovers_accounts_and_bad_rows_do_not_stop_the_run(self, fetch_rows):
         missing_id = self.source_row()
         missing_id["raw_data"]["ID"] = "  "
@@ -253,7 +253,7 @@ class EmmaImportServiceTests(TestCase):
             "EUR",
         )
 
-    @patch("money.services.emma_import.fetch_worksheet_rows")
+    @patch("money.services.reconciliation.fetch_worksheet_rows")
     def test_importer_retries_canonical_write_after_a_previous_row_failure(self, fetch_rows):
         invalid = self.source_row(**{"Amount": "not-money"})
         fetch_rows.return_value = [invalid]
@@ -269,7 +269,7 @@ class EmmaImportServiceTests(TestCase):
         self.assertEqual(Transaction.objects.count(), 1)
 
     @override_settings(MONEY_IMPORT_USERNAME="")
-    @patch("money.services.emma_import.fetch_worksheet_rows")
+    @patch("money.services.reconciliation.fetch_worksheet_rows")
     def test_missing_import_user_fails_and_records_import_run(self, fetch_rows):
         with self.assertRaises(ImportConfigurationError):
             run_emma_import()
@@ -285,32 +285,13 @@ class EmmaImportOperationsTests(TestCase):
             username="admin", password="admin-password", email="admin@example.com"
         )
 
-    @patch("finance.admin.run_emma_import")
-    def test_admin_button_calls_the_shared_import_service(self, run_import):
-        run_import.return_value = SimpleNamespace(
-            status="success",
-            rows_created=2,
-            rows_updated=1,
-            rows_skipped=3,
-            rows_failed=0,
-        )
+    def test_admin_has_run_history_but_no_synchronous_trigger(self):
         self.client.force_login(self.admin_user)
-
-        response = self.client.post(reverse("admin:finance_importrun_run"))
-
-        self.assertRedirects(
-            response,
-            reverse("admin:finance_importrun_changelist"),
-            fetch_redirect_response=False,
-        )
-        run_import.assert_called_once_with()
-
-    @patch("finance.admin.run_emma_import")
-    def test_admin_import_action_rejects_get_requests(self, run_import):
-        self.client.force_login(self.admin_user)
-        response = self.client.get(reverse("admin:finance_importrun_run"))
-        self.assertEqual(response.status_code, 405)
-        run_import.assert_not_called()
+        response = self.client.get(reverse("admin:finance_importrun_changelist"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Intraday")
+        with self.assertRaises(Exception):
+            reverse("admin:finance_importrun_run")
 
     @patch("finance.management.commands.import_emma.run_emma_import")
     def test_management_command_prints_import_summary(self, run_import):
