@@ -109,6 +109,30 @@ class UserIsolationTests(TestCase):
         self.assertNotContains(response, "Private Merchant Name")
         self.assertContains(response, "No transactions yet")
 
+    def test_user_cannot_open_another_users_transaction_detail(self):
+        other_user = get_user_model().objects.create_user(
+            username="detail-owner", password="test-password"
+        )
+        other_account = FinancialAccount.objects.create(
+            user=other_user,
+            source_name="Private account",
+            institution_name="Private bank",
+        )
+        other_transaction = Transaction.objects.create(
+            user=other_user,
+            account=other_account,
+            transaction_date="2026-01-02",
+            amount=Decimal("-12.34"),
+            source_merchant="Private detail record",
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get(
+            reverse("finance:transaction_detail", args=[other_transaction.pk])
+        )
+
+        self.assertEqual(response.status_code, 404)
+
     def test_user_cannot_see_another_users_spend_rules(self):
         self.client.force_login(self.user)
         response = self.client.get(reverse("finance:rules"))
@@ -203,3 +227,77 @@ class FinanceModelTests(TestCase):
             ValidationError, "The account must belong to the transaction user."
         ):
             record.full_clean()
+
+
+class TransactionDetailViewTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="detail-user", password="test-password")
+        self.account = FinancialAccount.objects.create(
+            user=self.user,
+            source_name="Current account",
+            display_name="Daily account",
+            institution_name="Example Bank",
+            include_in_analytics=False,
+        )
+        self.transaction = Transaction.objects.create(
+            user=self.user,
+            account=self.account,
+            source_system="emma",
+            source_state=Transaction.SourceState.ACTIVE,
+            source_transaction_id="emma-detail-1",
+            transaction_date="2026-10-02",
+            amount=Decimal("-23.45"),
+            currency="GBP",
+            description="Coffee with a friend",
+            merchant_name="Cafe Example",
+            source_category="Eating out",
+            source_subcategory="Cafe",
+            source_type="Purchase",
+            source_tags="social",
+            source_counterparty="Cafe Example Ltd",
+            source_custom_name="Coffee",
+            source_merchant="CAFE EXAMPLE",
+            source_additional_details="Contactless card payment",
+            raw_data={"ID": "emma-detail-1", "Date": "10/2/2026", "Unknown": "retained"},
+            imported_at="2026-10-02T12:00:00Z",
+            last_source_sync_at="2026-10-03T08:30:00Z",
+        )
+
+    def test_detail_page_shows_transaction_source_classification_and_raw_payload(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(
+            reverse("finance:transaction_detail", args=[self.transaction.pk])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        for text in (
+            "Coffee with a friend",
+            "23.45",
+            "GBP",
+            "Daily account",
+            "Example Bank",
+            "Eating out",
+            "Cafe",
+            "Purchase",
+            "Emma transaction ID",
+            "emma-detail-1",
+            "Contactless card payment",
+            "&quot;Unknown&quot;: &quot;retained&quot;",
+            "Included in account analytics",
+        ):
+            with self.subTest(text=text):
+                self.assertContains(response, text)
+        self.assertNotContains(response, "Edit transaction")
+        self.assertNotContains(response, "Save changes")
+
+    def test_transaction_list_links_rows_to_detail_in_new_tab(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("finance:transactions"))
+
+        self.assertEqual(response.status_code, 200)
+        detail_url = reverse("finance:transaction_detail", args=[self.transaction.pk])
+        self.assertContains(response, f'href="{detail_url}"')
+        self.assertContains(response, 'target="_blank"')
+        self.assertContains(response, 'rel="noopener"')

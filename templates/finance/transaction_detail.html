@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Transaction details{% endblock %}
+{% block content %}
+<header class="page-header transaction-detail-header">
+  <div>
+    <a class="text-link detail-back-link" href="{% url 'finance:transactions' %}">← Transactions</a>
+    <span class="eyebrow">TRANSACTION RECORD</span>
+    <h1>{{ transaction.description|default:transaction.source_merchant|default:transaction.source_counterparty|default:"Transaction" }}</h1>
+    <p>{{ transaction.transaction_date|date:"j F Y" }} · {{ transaction.account.display_name|default:transaction.account.source_name }}</p>
+  </div>
+  <div class="transaction-detail-amount{% if transaction.amount < 0 %} amount-negative{% else %} amount-positive{% endif %}">
+    {{ transaction.amount|floatformat:2 }} {{ transaction.currency }}
+  </div>
+</header>
+<div class="transaction-detail-layout">
+  <section class="detail-section" aria-labelledby="canonical-heading">
+    <header class="detail-section-heading"><span class="eyebrow">MONEY RECORD</span><h2 id="canonical-heading">Transaction details</h2></header>
+    <dl class="detail-list">
+      <div><dt>Description</dt><dd>{{ transaction.description|default:"—" }}</dd></div>
+      <div><dt>Merchant name</dt><dd>{{ transaction.merchant_name|default:"—" }}</dd></div>
+      <div><dt>Counterparty</dt><dd>{{ transaction.source_counterparty|default:"—" }}</dd></div>
+      <div><dt>Amount</dt><dd class="{% if transaction.amount < 0 %}amount-negative{% else %}amount-positive{% endif %}">{{ transaction.amount|floatformat:2 }} {{ transaction.currency }}</dd></div>
+      <div><dt>Transaction date</dt><dd>{{ transaction.transaction_date|date:"j F Y" }}</dd></div>
+      <div><dt>Posted date</dt><dd>{{ transaction.posted_date|date:"j F Y"|default:"—" }}</dd></div>
+      <div><dt>Currency</dt><dd>{{ transaction.currency }}</dd></div>
+      <div><dt>Account</dt><dd>{{ transaction.account.display_name|default:transaction.account.source_name }}</dd></div>
+      <div><dt>Source account name</dt><dd>{{ transaction.account.source_name }}</dd></div>
+      <div><dt>Institution / bank</dt><dd>{{ transaction.account.institution_name|default:"—" }}</dd></div>
+      <div><dt>Account type</dt><dd>{{ transaction.account.account_type|default:"—" }}</dd></div>
+      <div><dt>Account currency</dt><dd>{{ transaction.account.currency }}</dd></div>
+      <div><dt>Account active</dt><dd>{{ transaction.account.is_active|yesno:"Yes,No" }}</dd></div>
+      <div><dt>Included in analytics</dt><dd>{{ transaction.account.include_in_analytics|yesno:"Yes,No" }}</dd></div>
+      <div><dt>Included in no-spend tracking</dt><dd>{{ transaction.account.include_in_no_spend_tracking|yesno:"Yes,No" }}</dd></div>
+    </dl>
+  </section>
+
+  <section class="detail-section" aria-labelledby="classification-heading">
+    <header class="detail-section-heading"><span class="eyebrow">OVERVIEW GRAPH FIELDS</span><h2 id="classification-heading">Stored classifications</h2></header>
+    <dl class="detail-list">
+      <div><dt>Source state</dt><dd><span class="detail-state detail-state-{{ transaction.source_state }}">{{ transaction.get_source_state_display }}</span></dd></div>
+      <div><dt>Included in account analytics</dt><dd>{{ transaction.account.include_in_analytics|yesno:"Yes,No" }}</dd></div>
+      <div><dt>Category</dt><dd>{{ transaction.source_category|default:"—" }}</dd></div>
+      <div><dt>Subcategory</dt><dd>{{ transaction.source_subcategory|default:"—" }}</dd></div>
+      <div><dt>Transaction type</dt><dd>{{ transaction.source_type|default:"—" }}</dd></div>
+      <div><dt>Tags</dt><dd>{{ transaction.source_tags|default:"—" }}</dd></div>
+      <div><dt>Linked transaction ID</dt><dd>{{ transaction.source_linked_transaction_id|default:"—" }}</dd></div>
+    </dl>
+  </section>
+
+  <section class="detail-section" aria-labelledby="source-heading">
+    <header class="detail-section-heading"><span class="eyebrow">EMMA SOURCE</span><h2 id="source-heading">Imported fields</h2></header>
+    <dl class="detail-list">
+      <div><dt>Source system</dt><dd>{{ transaction.source_system }}</dd></div>
+      <div><dt>Emma transaction ID</dt><dd class="detail-monospace">{{ transaction.source_transaction_id|default:"—" }}</dd></div>
+      <div><dt>Source category</dt><dd>{{ transaction.source_category|default:"—" }}</dd></div>
+      <div><dt>Source subcategory</dt><dd>{{ transaction.source_subcategory|default:"—" }}</dd></div>
+      <div><dt>Source type</dt><dd>{{ transaction.source_type|default:"—" }}</dd></div>
+      <div><dt>Custom name</dt><dd>{{ transaction.source_custom_name|default:"—" }}</dd></div>
+      <div><dt>Source merchant</dt><dd>{{ transaction.source_merchant|default:"—" }}</dd></div>
+      <div><dt>Additional details</dt><dd>{{ transaction.source_additional_details|default:"—"|linebreaksbr }}</dd></div>
+      <div><dt>Notes</dt><dd>{{ transaction.source_notes|default:"—"|linebreaksbr }}</dd></div>
+      <div><dt>Source-created timestamp</dt><dd>{{ transaction.source_created_at|date:"j F Y, H:i:s T"|default:"—" }}</dd></div>
+    </dl>
+  </section>
+
+  <section class="detail-section" aria-labelledby="sync-heading">
+    <header class="detail-section-heading"><span class="eyebrow">RECORD HISTORY</span><h2 id="sync-heading">Import and sync</h2></header>
+    <dl class="detail-list">
+      <div><dt>Imported at</dt><dd>{{ transaction.imported_at|date:"j F Y, H:i:s T"|default:"—" }}</dd></div>
+      <div><dt>Last source sync</dt><dd>{{ transaction.last_source_sync_at|date:"j F Y, H:i:s T"|default:"—" }}</dd></div>
+      <div><dt>Money record created</dt><dd>{{ transaction.created_at|date:"j F Y, H:i:s T" }}</dd></div>
+      <div><dt>Money record updated</dt><dd>{{ transaction.updated_at|date:"j F Y, H:i:s T" }}</dd></div>
+      <div><dt>Source content hash</dt><dd class="detail-monospace">{{ transaction.source_content_hash|default:"—" }}</dd></div>
+    </dl>
+  </section>
+
+  <details class="raw-source-details">
+    <summary><span><span class="eyebrow">SOURCE SNAPSHOT</span><strong>Raw Emma payload</strong></span><span class="raw-toggle" aria-hidden="true">＋</span></summary>
+    <pre>{{ raw_data_json }}</pre>
+  </details>
+</div>
+{% endblock %}

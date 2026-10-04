@@ -1,7 +1,9 @@
+import json
+
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.http import JsonResponse
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET
 
@@ -24,6 +26,25 @@ def transactions(request):
     )
     page = Paginator(transaction_list, 25).get_page(request.GET.get("page"))
     return render(request, "finance/transactions.html", {"page": page})
+
+
+@login_required
+def transaction_detail(request, pk):
+    transaction_record = get_object_or_404(
+        Transaction.objects.select_related("account").filter(user=request.user),
+        pk=pk,
+    )
+    raw_data_json = json.dumps(
+        transaction_record.raw_data,
+        ensure_ascii=False,
+        indent=2,
+        sort_keys=True,
+    )
+    return render(
+        request,
+        "finance/transaction_detail.html",
+        {"transaction": transaction_record, "raw_data_json": raw_data_json},
+    )
 
 
 @login_required

@@ -12,11 +12,11 @@
     <tbody>
       {% for transaction in page.object_list %}
       <tr>
-        <td>{{ transaction.transaction_date|date:"j M Y" }}</td>
-        <td><span class="table-primary">{{ transaction.account.display_name|default:transaction.account.source_name }}</span></td>
-        <td><span class="table-primary">{{ transaction.source_merchant|default:transaction.source_counterparty|default:transaction.source_custom_name|default:"—" }}</span></td>
-        <td>{{ transaction.source_category|default:"—" }}</td>
-        <td class="amount-column{% if transaction.amount < 0 %} amount-negative{% else %} amount-positive{% endif %}">{{ transaction.amount|floatformat:2 }} {{ transaction.currency }}</td>
+        <td><a class="transaction-row-link" target="_blank" rel="noopener" href="{% url 'finance:transaction_detail' transaction.pk %}">{{ transaction.transaction_date|date:"j M Y" }}</a></td>
+        <td><a class="transaction-row-link table-primary" target="_blank" rel="noopener" href="{% url 'finance:transaction_detail' transaction.pk %}">{{ transaction.account.display_name|default:transaction.account.source_name }}</a></td>
+        <td><a class="transaction-row-link table-primary" target="_blank" rel="noopener" href="{% url 'finance:transaction_detail' transaction.pk %}">{{ transaction.source_merchant|default:transaction.source_counterparty|default:transaction.source_custom_name|default:"—" }}</a></td>
+        <td><a class="transaction-row-link" target="_blank" rel="noopener" href="{% url 'finance:transaction_detail' transaction.pk %}">{{ transaction.source_category|default:"—" }}</a></td>
+        <td class="amount-column{% if transaction.amount < 0 %} amount-negative{% else %} amount-positive{% endif %}"><a class="transaction-row-link" target="_blank" rel="noopener" href="{% url 'finance:transaction_detail' transaction.pk %}">{{ transaction.amount|floatformat:2 }} {{ transaction.currency }}</a></td>
       </tr>
       {% endfor %}
     </tbody>

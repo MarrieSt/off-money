@@ -7,6 +7,7 @@ app_name = "finance"
 urlpatterns = [
     path("", views.home, name="home"),
     path("transactions/", views.transactions, name="transactions"),
+    path("transactions/<int:pk>/", views.transaction_detail, name="transaction_detail"),
     path("accounts/", views.accounts, name="accounts"),
     path("rules/", views.rules, name="rules"),
     path("api/analytics/spending", views.spending_api, name="spending_api"),
