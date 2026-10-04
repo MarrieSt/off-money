@@ -29,6 +29,7 @@ LONDON = ZoneInfo("Europe/London")
 LOCK_KEY = 0x4D4F4E4559
 BATCH_SIZE = 1000
 INTRADAY_HOURS = {6, 9, 12, 15, 18, 21}
+SCHEDULE_GRACE_SECONDS = 10 * 60
 SOURCE_CONTROLLED_FIELDS = (
     "account",
     "transaction_date",
@@ -81,19 +82,24 @@ def get_reconciliation_window(mode, today):
     raise ValueError("mode must be intraday, daily, or full.")
 
 
+def _within_schedule_grace(now, target_hour):
+    seconds_after_hour = now.minute * 60 + now.second
+    return now.hour == target_hour and seconds_after_hour <= SCHEDULE_GRACE_SECONDS
+
+
 def _scheduled_skip_reason(mode, now):
     if mode == ImportRun.JobType.INTRADAY:
-        if now.minute == 0 and now.hour in INTRADAY_HOURS:
+        if any(_within_schedule_grace(now, hour) for hour in INTRADAY_HOURS):
             return None
         return "Not an intraday reconciliation time in Europe/London."
     if mode == ImportRun.JobType.DAILY:
         if now.day == 3:
             return "Daily reconciliation is superseded by monthly full reconciliation on day 3."
-        if now.hour == 3 and now.minute == 0:
+        if _within_schedule_grace(now, 3):
             return None
         return "Not the scheduled daily reconciliation time in Europe/London."
     if mode == ImportRun.JobType.FULL:
-        if now.day == 3 and now.hour == 0 and now.minute == 0:
+        if now.day == 3 and _within_schedule_grace(now, 0):
             return None
         return "Not the scheduled monthly full reconciliation time in Europe/London."
     return "Scheduled reconciliation requires a standard mode."

@@ -202,7 +202,7 @@ class ReconciliationServiceTests(TestCase):
 
     @patch("money.services.reconciliation.fetch_worksheet_rows")
     def test_scheduled_daily_skips_on_london_day_three_but_manual_daily_runs(self, fetch_rows):
-        now = datetime(2026, 10, 3, 3, 0, tzinfo=ZoneInfo("Europe/London"))
+        now = datetime(2026, 10, 3, 3, 4, tzinfo=ZoneInfo("Europe/London"))
         fetch_rows.return_value = []
 
         skipped = reconcile_transactions(mode="daily", scheduled=True, now=now)
@@ -216,6 +216,36 @@ class ReconciliationServiceTests(TestCase):
         fetch_rows.assert_called_once()
         self.assertEqual(manual.requested_start_date, date(2026, 7, 3))
         self.assertEqual(manual.requested_end_date, date(2026, 10, 3))
+
+    @patch("money.services.reconciliation.fetch_worksheet_rows")
+    def test_scheduled_intraday_accepts_railway_start_four_minutes_after_target(self, fetch_rows):
+        now = datetime(2026, 10, 4, 15, 4, 11, tzinfo=ZoneInfo("Europe/London"))
+        fetch_rows.return_value = []
+
+        run = reconcile_transactions(mode="intraday", scheduled=True, now=now)
+
+        self.assertEqual(run.status, ImportRun.Status.SUCCESS)
+        fetch_rows.assert_called_once()
+
+    @patch("money.services.reconciliation.fetch_worksheet_rows")
+    def test_scheduled_intraday_skips_after_ten_minute_grace(self, fetch_rows):
+        now = datetime(2026, 10, 4, 15, 11, tzinfo=ZoneInfo("Europe/London"))
+
+        run = reconcile_transactions(mode="intraday", scheduled=True, now=now)
+
+        self.assertIsNone(run)
+        fetch_rows.assert_not_called()
+        self.assertEqual(ImportRun.objects.count(), 0)
+
+    @patch("money.services.reconciliation.fetch_worksheet_rows")
+    def test_monthly_full_accepts_utc_candidate_at_0009_london(self, fetch_rows):
+        now = datetime(2026, 10, 3, 0, 9, tzinfo=ZoneInfo("Europe/London"))
+        fetch_rows.return_value = []
+
+        run = reconcile_transactions(mode="full", scheduled=True, now=now)
+
+        self.assertEqual(run.status, ImportRun.Status.SUCCESS)
+        fetch_rows.assert_called_once()
 
     @patch("money.services.reconciliation.fetch_worksheet_rows")
     def test_locked_reconciliation_is_audited_as_skipped(self, fetch_rows):

@@ -96,7 +96,7 @@ Each non-empty sheet row is kept as the latest `EmmaRawTransaction` snapshot, ke
 - `--mode full`: authoritative full-sheet reconciliation.
 - `--start YYYY-MM-DD --end YYYY-MM-DD`: custom inclusive range.
 - `--dry-run`: read, parse, match, and report changes without writing accounts, raw rows, transactions, or missing state. The audit run itself is still recorded.
-- `--scheduled`: apply the Europe/London schedule guards. Scheduled daily skips on day 3; an explicitly manual `--mode daily` still runs that day.
+- `--scheduled`: apply the Europe/London schedule guards. Target times accept starts up to 10 minutes late to tolerate Railway Cron startup jitter. Scheduled daily skips on day 3; an explicitly manual `--mode daily` still runs that day.
 
 Examples for Railway's service shell (Nixpacks Python environment):
 
@@ -110,4 +110,4 @@ These commands are entry points only. No Railway Cron services or schedules are 
 
 Every run fetches one complete sheet snapshot, compares Emma IDs against the requested window and local IDs in that window, and uses a PostgreSQL advisory lock. A changed date is reconciled by Emma ID even if it moves across the window. Missing-state changes are suppressed if any relevant row fails or the source read fails. Missing Emma transactions are retained in the database but excluded from spending analytics; reappearing rows restore them.
 
-The same command supports Railway Cron later, but this implementation does **not** add Cron services or schedules. Use the commands manually first. When scheduling is configured, a UTC candidate schedule must invoke `--scheduled` often enough for its Europe/London guards to catch the required GMT/BST times.
+The same command supports Railway Cron later, but this implementation does **not** add Cron services or schedules. Use the commands manually first. When scheduling is configured, use an hourly UTC candidate schedule invoking `--scheduled`; the Europe/London guard will reconcile only at the required hours, allowing up to 10 minutes of Railway startup delay across GMT/BST.
