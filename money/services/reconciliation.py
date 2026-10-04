@@ -97,9 +97,9 @@ def _scheduled_skip_reason(mode, now):
     if mode == ImportRun.JobType.DAILY:
         if now.day == 3:
             return "Daily reconciliation is superseded by monthly full reconciliation on day 3."
-        if _within_schedule_grace(now, 3):
+        if _within_schedule_grace(now, 2) or _within_schedule_grace(now, 3):
             return None
-        return "Not the scheduled daily reconciliation time in Europe/London."
+        return "Daily reconciliation is only due at 02:00 or 03:00 Europe/London, with a ten-minute grace."
     if mode == ImportRun.JobType.FULL:
         if now.day == 3 and _within_schedule_grace(now, 0):
             return None

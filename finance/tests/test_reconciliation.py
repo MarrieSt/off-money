@@ -218,6 +218,28 @@ class ReconciliationServiceTests(TestCase):
         self.assertEqual(manual.requested_end_date, date(2026, 10, 3))
 
     @patch("money.services.reconciliation.fetch_worksheet_rows")
+    def test_scheduled_daily_accepts_two_or_three_london_time(self, fetch_rows):
+        fetch_rows.return_value = []
+        for now in (
+            datetime(2026, 1, 4, 2, 5, tzinfo=ZoneInfo("Europe/London")),
+            datetime(2026, 7, 4, 3, 5, tzinfo=ZoneInfo("Europe/London")),
+        ):
+            with self.subTest(now=now):
+                run = reconcile_transactions(mode="daily", scheduled=True, now=now)
+                self.assertEqual(run.status, ImportRun.Status.SUCCESS)
+
+    @patch("money.services.reconciliation.fetch_worksheet_rows")
+    def test_scheduled_daily_skips_other_hours(self, fetch_rows):
+        for now in (
+            datetime(2026, 1, 4, 1, 5, tzinfo=ZoneInfo("Europe/London")),
+            datetime(2026, 7, 4, 4, 5, tzinfo=ZoneInfo("Europe/London")),
+        ):
+            with self.subTest(now=now):
+                run = reconcile_transactions(mode="daily", scheduled=True, now=now)
+                self.assertIsNone(run)
+        fetch_rows.assert_not_called()
+
+    @patch("money.services.reconciliation.fetch_worksheet_rows")
     def test_scheduled_intraday_accepts_railway_start_four_minutes_after_utc_target(self, fetch_rows):
         utc_now = datetime(2026, 10, 4, 15, 4, 11, tzinfo=ZoneInfo("UTC"))
         fetch_rows.return_value = []
