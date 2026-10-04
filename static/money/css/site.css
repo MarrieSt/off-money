@@ -136,10 +136,11 @@ h1, h2, h3, p { margin-top: 0; }
 .chart-column { position: relative; min-width: 0; height: 100%; }
 .chart-column-hitarea { position: absolute; z-index: 0; inset: 0 0 28px; width: 100%; border: 0; background: transparent; cursor: pointer; }
 .chart-bar-track { position: absolute; inset: 0 13% 28px; z-index: 2; pointer-events: none; }
+.chart-column-total { position: absolute; left: 50%; z-index: 4; transform: translate(-50%, -120%); color: #52677e; font-size: 9px; font-variant-numeric: tabular-nums; line-height: 1; white-space: nowrap; }
 .chart-segment { position: absolute; left: 0; width: 100%; min-height: 1px; padding: 0; border: 0; border-radius: 1px; cursor: pointer; pointer-events: auto; }
 .chart-segment:hover, .chart-segment:focus-visible { z-index: 3; outline: 2px solid white; box-shadow: 0 0 0 3px var(--money-navy); }
 .chart-segment-negative { opacity: .72; }
-.chart-date-label { position: absolute; top: calc(100% - 21px); right: -8px; left: -8px; overflow: hidden; color: #77879a; font-size: 9px; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+.chart-date-label { position: absolute; top: calc(100% - 21px); right: -8px; left: -8px; display: grid; overflow: hidden; color: #77879a; font-size: 9px; line-height: 1.15; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
 .spending-legend { display: flex; flex-wrap: wrap; gap: 8px 15px; margin: 13px 0 0 66px; }
 .legend-item { display: inline-flex; align-items: center; gap: 6px; padding: 2px 0; border: 0; color: #52647a; background: transparent; cursor: pointer; font-size: 10px; }
 .legend-item.is-hidden { opacity: .45; text-decoration: line-through; }
@@ -242,6 +243,7 @@ h1, h2, h3, p { margin-top: 0; }
   .chart-columns { gap: 2px; }
   .chart-bar-track { right: 9%; left: 9%; }
   .chart-date-label { right: -12px; left: -12px; font-size: 8px; }
+  .chart-column-total { font-size: 8px; }
   .spending-legend, .show-all-button, .spending-empty-note { margin-left: 53px; }
 }
 

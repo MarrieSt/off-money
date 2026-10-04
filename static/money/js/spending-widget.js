@@ -45,6 +45,11 @@
     style: "currency", currency: "GBP", minimumFractionDigits: 2, maximumFractionDigits: 2,
   }).format(Number(value));
 
+  const columnTotal = (value) => new Intl.NumberFormat("en-GB", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(Number(value));
+
   const colorFor = (key) => {
     if (key === "__other__") return "#8192a4";
     let hash = 2166136261;
@@ -205,6 +210,13 @@
 
       const track = document.createElement("div");
       track.className = "chart-bar-track";
+      const totalLabel = document.createElement("span");
+      totalLabel.className = "chart-column-total";
+      totalLabel.textContent = columnTotal(bucket.total);
+      totalLabel.title = `Total ${money(bucket.total)}`;
+      totalLabel.setAttribute("aria-label", `Total ${money(bucket.total)}`);
+      totalLabel.style.top = `${Math.max(0, zeroTop - (positive / span) * 100)}%`;
+      track.append(totalLabel);
       let positiveCursor = 0;
       let negativeCursor = 0;
       bucket.segments.forEach((segment) => {
@@ -231,7 +243,16 @@
 
       const label = document.createElement("span");
       label.className = "chart-date-label";
-      label.textContent = bucketLabel(bucket, data.granularity);
+      if (data.granularity === "day") {
+        const weekday = document.createElement("span");
+        weekday.textContent = formatDate(bucket.start, { weekday: "short" });
+        const date = document.createElement("span");
+        date.textContent = formatDate(bucket.start, { day: "numeric", month: "short" });
+        label.append(weekday, date);
+        label.title = formatDate(bucket.start, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+      } else {
+        label.textContent = bucketLabel(bucket, data.granularity);
+      }
       column.append(label);
       columns.append(column);
     });
